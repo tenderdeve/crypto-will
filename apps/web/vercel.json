@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/send-alive-checks",
+      "schedule": "0 10 1 * *"
+    },
+    {
+      "path": "/api/cron/check-expired",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

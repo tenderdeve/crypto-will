@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { aliveCheckSchema } from "@/lib/validations/schemas";
 import { getWillById, updateWillAlive } from "@/lib/db/queries/wills";
-import { confirmAliveCheck, getAliveChecksByWillId } from "@/lib/db/queries/alive-checks";
-import { verifyMessage } from "viem";
+import { confirmAliveCheck, getAliveCheckByToken, getAliveChecksByWillId } from "@/lib/db/queries/alive-checks";
+import { z } from "zod";
+
+const aliveCheckBodySchema = z.union([
+  z.object({ signature: z.string().min(1), willId: z.string().uuid() }),
+  z.object({ signature: z.string().min(1), token: z.string().min(1) }),
+]);
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const parsed = aliveCheckSchema.safeParse(body);
+    const parsed = aliveCheckBodySchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -16,7 +20,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { signature, willId } = parsed.data;
+    const { signature } = parsed.data;
+    let willId: string;
+    let aliveCheckId: string | undefined;
+
+    // Support both willId-based and token-based lookups
+    if ("token" in parsed.data) {
+      const aliveCheck = await getAliveCheckByToken(parsed.data.token);
+      if (!aliveCheck) {
+        return NextResponse.json(
+          { error: "Invalid or expired check token", code: "TOKEN_INVALID" },
+          { status: 404 }
+        );
+      }
+      willId = aliveCheck.will_id;
+      aliveCheckId = aliveCheck.id;
+    } else {
+      willId = parsed.data.willId;
+    }
 
     const will = await getWillById(willId);
     if (!will) {
@@ -33,12 +54,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find latest pending alive check for this will
-    const checks = await getAliveChecksByWillId(willId);
-    const pendingCheck = checks.find((c) => c.status === "sent");
-
-    if (pendingCheck) {
-      await confirmAliveCheck(pendingCheck.id, signature);
+    // Confirm the alive check record
+    if (aliveCheckId) {
+      await confirmAliveCheck(aliveCheckId, signature);
+    } else {
+      const checks = await getAliveChecksByWillId(willId);
+      const pendingCheck = checks.find((c) => c.status === "sent");
+      if (pendingCheck) {
+        await confirmAliveCheck(pendingCheck.id, signature);
+      }
     }
 
     // Update will's last alive timestamp
