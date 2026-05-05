@@ -26,6 +26,8 @@ interface ICryptoWill {
     error InvalidBeneficiary();
     error NoTokensSpecified();
     error TransferFailed();
+    error TooManyTokens();
+    error ZeroETHDeposit();
 
     // ─── Events ─────────────────────────────────────────────────────────
 
