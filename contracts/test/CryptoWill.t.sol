@@ -5,6 +5,7 @@ import {Test, console2} from "forge-std/Test.sol";
 import {CryptoWill} from "../src/CryptoWill.sol";
 import {ICryptoWill} from "../src/interfaces/ICryptoWill.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {RevertingERC20, ReturnFalseERC20} from "./mocks/RevertingERC20.sol";
 
 contract CryptoWillTest is Test {
     CryptoWill public cryptoWill;
@@ -198,8 +199,16 @@ contract CryptoWillTest is Test {
         assertEq(token1.balanceOf(beneficiary), 1000 ether);
         assertEq(token2.balanceOf(beneficiary), 500 ether);
 
-        // Verify ETH transferred
+        // ETH is pull-payment: stored in pendingETH, not pushed directly
+        assertEq(cryptoWill.pendingETH(beneficiary), 2 ether);
+        assertEq(beneficiary.balance, 0);
+
+        // Beneficiary claims ETH
+        vm.deal(beneficiary, 0);
+        vm.prank(beneficiary);
+        cryptoWill.claimETH();
         assertEq(beneficiary.balance, 2 ether);
+        assertEq(cryptoWill.pendingETH(beneficiary), 0);
 
         // Verify will deleted
         ICryptoWill.Will memory w = cryptoWill.getWill(owner);
@@ -420,6 +429,212 @@ contract CryptoWillTest is Test {
     //  getWill
     // ═══════════════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  executeWill — token transfer safety (issue #33)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function test_executeWill_oneRevertingToken_otherTokensStillTransfer() public {
+        RevertingERC20 badToken = new RevertingERC20();
+        badToken.mint(owner, 100 ether);
+
+        address[] memory tokens = new address[](3);
+        tokens[0] = address(token1);
+        tokens[1] = address(badToken);
+        tokens[2] = address(token2);
+
+        vm.prank(owner);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        vm.startPrank(owner);
+        token1.approve(address(cryptoWill), type(uint256).max);
+        badToken.approve(address(cryptoWill), type(uint256).max);
+        token2.approve(address(cryptoWill), type(uint256).max);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+
+        // Expect TokenTransferFailed emitted for the bad token
+        vm.expectEmit(true, true, true, true);
+        emit ICryptoWill.TokenTransferFailed(address(badToken), owner, beneficiary, 100 ether);
+
+        vm.prank(executor);
+        cryptoWill.executeWill(owner);
+
+        // Good tokens transferred
+        assertEq(token1.balanceOf(beneficiary), 1000 ether);
+        assertEq(token2.balanceOf(beneficiary), 500 ether);
+        // Bad token stays with owner
+        assertEq(badToken.balanceOf(owner), 100 ether);
+    }
+
+    function test_executeWill_returnFalseToken_otherTokensStillTransfer() public {
+        ReturnFalseERC20 falseToken = new ReturnFalseERC20();
+        falseToken.mint(owner, 100 ether);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(falseToken);
+        tokens[1] = address(token1);
+
+        vm.prank(owner);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        vm.startPrank(owner);
+        falseToken.approve(address(cryptoWill), type(uint256).max);
+        token1.approve(address(cryptoWill), type(uint256).max);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+
+        // Expect TokenTransferFailed for the false-returning token
+        vm.expectEmit(true, true, true, true);
+        emit ICryptoWill.TokenTransferFailed(address(falseToken), owner, beneficiary, 100 ether);
+
+        vm.prank(executor);
+        cryptoWill.executeWill(owner);
+
+        // Normal token transferred
+        assertEq(token1.balanceOf(beneficiary), 1000 ether);
+        // False-returning token stays with owner
+        assertEq(falseToken.balanceOf(owner), 100 ether);
+    }
+
+    function test_executeWill_allTokensRevert_willStillExecutes() public {
+        RevertingERC20 bad1 = new RevertingERC20();
+        RevertingERC20 bad2 = new RevertingERC20();
+        bad1.mint(owner, 100 ether);
+        bad2.mint(owner, 200 ether);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(bad1);
+        tokens[1] = address(bad2);
+
+        vm.prank(owner);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        vm.startPrank(owner);
+        bad1.approve(address(cryptoWill), type(uint256).max);
+        bad2.approve(address(cryptoWill), type(uint256).max);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+
+        // executeWill should succeed even if all token transfers fail
+        vm.prank(executor);
+        cryptoWill.executeWill(owner);
+
+        // Will is deleted
+        ICryptoWill.Will memory w = cryptoWill.getWill(owner);
+        assertEq(w.owner, address(0));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ETH pull-payment safety (issue #35)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function test_executeWill_ethStoredAsPending_notPushed() public {
+        _createDefaultWill();
+        _approveTokens();
+
+        vm.deal(owner, 5 ether);
+        vm.prank(owner);
+        cryptoWill.depositETH{value: 3 ether}();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+        vm.prank(executor);
+        cryptoWill.executeWill(owner);
+
+        // ETH in pendingETH, not beneficiary balance
+        assertEq(cryptoWill.pendingETH(beneficiary), 3 ether);
+        assertEq(beneficiary.balance, 0);
+    }
+
+    function test_executeWill_nonPayableBeneficiary_ethStoredSafely() public {
+        // Deploy a contract that cannot receive ETH
+        NonPayableContract npc = new NonPayableContract();
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+
+        vm.prank(owner);
+        cryptoWill.createWill(address(npc), tokens, GRACE_PERIOD);
+
+        vm.prank(owner);
+        token1.approve(address(cryptoWill), type(uint256).max);
+
+        vm.deal(owner, 5 ether);
+        vm.prank(owner);
+        cryptoWill.depositETH{value: 2 ether}();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+
+        // Must not revert even though beneficiary can't receive ETH
+        vm.prank(executor);
+        cryptoWill.executeWill(owner);
+
+        // ETH is safely stored for when/if beneficiary can claim
+        assertEq(cryptoWill.pendingETH(address(npc)), 2 ether);
+        // Token still transferred
+        assertEq(token1.balanceOf(address(npc)), 1000 ether);
+    }
+
+    function test_claimETH_success() public {
+        _createDefaultWill();
+
+        vm.deal(owner, 5 ether);
+        vm.prank(owner);
+        cryptoWill.depositETH{value: 4 ether}();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+        vm.prank(executor);
+        cryptoWill.executeWill(owner);
+
+        assertEq(cryptoWill.pendingETH(beneficiary), 4 ether);
+
+        vm.prank(beneficiary);
+        cryptoWill.claimETH();
+
+        assertEq(beneficiary.balance, 4 ether);
+        assertEq(cryptoWill.pendingETH(beneficiary), 0);
+    }
+
+    function test_claimETH_revert_noPending() public {
+        vm.prank(beneficiary);
+        vm.expectRevert(ICryptoWill.NoETHPending.selector);
+        cryptoWill.claimETH();
+    }
+
+    function test_claimETH_multipleWills_accumulateCorrectly() public {
+        // Two different owners both have beneficiary as their beneficiary
+        address owner2 = makeAddr("owner2");
+        token1.mint(owner2, 500 ether);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+
+        vm.prank(owner);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+        vm.prank(owner2);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        vm.deal(owner, 3 ether);
+        vm.deal(owner2, 2 ether);
+        vm.prank(owner);
+        cryptoWill.depositETH{value: 3 ether}();
+        vm.prank(owner2);
+        cryptoWill.depositETH{value: 2 ether}();
+
+        vm.warp(block.timestamp + GRACE_PERIOD + 1);
+        cryptoWill.executeWill(owner);
+        cryptoWill.executeWill(owner2);
+
+        // Both credited
+        assertEq(cryptoWill.pendingETH(beneficiary), 5 ether);
+
+        vm.prank(beneficiary);
+        cryptoWill.claimETH();
+        assertEq(beneficiary.balance, 5 ether);
+    }
+
     function test_getWill_returnsCorrectData() public {
         _createDefaultWill();
 
@@ -440,4 +655,9 @@ contract CryptoWillTest is Test {
         assertEq(empty.tokens.length, 0);
         assertEq(empty.active, false);
     }
+}
+
+/// @dev Helper: contract with no receive() — cannot accept ETH pushes
+contract NonPayableContract {
+    // Intentionally no receive() or fallback()
 }
