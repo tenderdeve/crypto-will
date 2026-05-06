@@ -28,13 +28,13 @@ function formatGracePeriod(seconds: bigint): string {
 export default function DashboardPage() {
   const { address } = useAccount();
   const { will, hasWill, isLoading } = useWill();
-  const { signAlive, isPending: isSigningAlive, isSuccess: aliveSuccess } = useSignAlive();
+  const { signAlive, isPending: isSigningAlive, isSuccess: aliveSuccess, hash: aliveHash } = useSignAlive();
   const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess } = useRevokeWill();
   const aliveSynced = useRef(false);
 
   // After on-chain signAlive confirms, sync DB last_alive_at
   useEffect(() => {
-    if (!aliveSuccess || !address || aliveSynced.current) return;
+    if (!aliveSuccess || !aliveHash || !address || aliveSynced.current) return;
     aliveSynced.current = true;
 
     fetch("/api/alive", {
@@ -43,9 +43,9 @@ export default function DashboardPage() {
         "Content-Type": "application/json",
         "x-wallet-address": address,
       },
-      body: JSON.stringify({ source: "dashboard" }),
-    }).catch(() => {}); // Best effort
-  }, [aliveSuccess, address]);
+      body: JSON.stringify({ source: "dashboard", txHash: aliveHash }),
+    }).catch(() => {}); // Best effort — on-chain is source of truth
+  }, [aliveSuccess, aliveHash, address]);
 
   return (
     <WalletGuard>

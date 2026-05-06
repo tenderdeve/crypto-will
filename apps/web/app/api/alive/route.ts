@@ -2,16 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWillById, getWillByUserId, updateWillAlive } from "@/lib/db/queries/wills";
 import { confirmAliveCheck, getAliveCheckByToken, getAliveChecksByWillId } from "@/lib/db/queries/alive-checks";
 import { getUserByWallet } from "@/lib/db/queries/users";
+import { getPublicClient } from "@/lib/chain/client";
 import { z } from "zod";
 
+const txHash = z.string().regex(/^0x[a-fA-F0-9]{64}$/, "Invalid tx hash");
+
 const aliveCheckBodySchema = z.union([
-  // Email link flow: token from the email link (on-chain signAlive already called)
-  z.object({ token: z.string().min(1) }),
-  // Dashboard flow: on-chain signAlive already called, sync DB via wallet header
-  z.object({ source: z.literal("dashboard") }),
+  // Email link flow: token from the email link, txHash as proof (on-chain signAlive called)
+  z.object({ token: z.string().min(1), txHash }),
+  // Dashboard flow: txHash proves wallet identity (on-chain signAlive already called)
+  z.object({ source: z.literal("dashboard"), txHash }),
   // Legacy: signature + willId
   z.object({ signature: z.string().min(1), willId: z.string().uuid() }),
 ]);
+
+async function verifyTxSender(hash: string, expectedAddress: string): Promise<boolean> {
+  try {
+    const publicClient = getPublicClient();
+    const tx = await publicClient.getTransaction({ hash: hash as `0x${string}` });
+    return tx.from.toLowerCase() === expectedAddress.toLowerCase();
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,9 +40,10 @@ export async function POST(request: NextRequest) {
 
     let willId: string;
     let aliveCheckId: string | undefined;
+    let ownerAddress: string | undefined;
 
     if ("token" in parsed.data) {
-      // Email link: look up the alive_check by token
+      // Email link: look up the alive_check by token (only status=sent, prevents replay)
       const aliveCheck = await getAliveCheckByToken(parsed.data.token);
       if (!aliveCheck) {
         return NextResponse.json(
@@ -39,8 +53,22 @@ export async function POST(request: NextRequest) {
       }
       willId = aliveCheck.will_id;
       aliveCheckId = aliveCheck.id;
+
+      // Resolve owner address for tx verification
+      const will = await getWillById(willId);
+      if (will) {
+        const user = await getUserByWallet(will.user_id); // user_id is the wallet address in some schemas
+        // Get owner address from will owner via users table — fetch will's user
+        // We use wallet_address from DB to verify the tx was sent by the will owner
+        const { data: userData } = await (await import("@/lib/db/supabase")).getSupabaseAdmin()
+          .from("users")
+          .select("wallet_address")
+          .eq("id", will.user_id)
+          .single();
+        ownerAddress = userData?.wallet_address;
+      }
     } else if ("source" in parsed.data && parsed.data.source === "dashboard") {
-      // Dashboard: resolve will from x-wallet-address header
+      // Dashboard: x-wallet-address header is the claimed identity, txHash verifies it
       const walletAddress = request.headers.get("x-wallet-address");
       if (!walletAddress) {
         return NextResponse.json(
@@ -48,6 +76,16 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
+
+      // Verify tx was sent by the claimed wallet
+      const isValid = await verifyTxSender(parsed.data.txHash, walletAddress);
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Transaction not sent by claimed wallet", code: "AUTH_FAILED" },
+          { status: 401 }
+        );
+      }
+
       const user = await getUserByWallet(walletAddress.toLowerCase());
       if (!user) {
         return NextResponse.json(
@@ -63,9 +101,21 @@ export async function POST(request: NextRequest) {
         );
       }
       willId = will.id;
+      ownerAddress = walletAddress;
     } else {
       // Legacy willId-based
       willId = (parsed.data as { willId: string }).willId;
+    }
+
+    // For token-based flow, verify tx sender matches will owner
+    if ("token" in parsed.data && ownerAddress) {
+      const isValid = await verifyTxSender(parsed.data.txHash, ownerAddress);
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Transaction not sent by will owner", code: "AUTH_FAILED" },
+          { status: 401 }
+        );
+      }
     }
 
     const will = await getWillById(willId);
@@ -83,14 +133,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Confirm any pending alive check record
+    // Confirm any pending alive check record (null signature — on-chain tx is the proof)
     if (aliveCheckId) {
-      await confirmAliveCheck(aliveCheckId, "");
+      await confirmAliveCheck(aliveCheckId, null);
     } else {
       const checks = await getAliveChecksByWillId(willId);
       const pendingCheck = checks.find((c) => c.status === "sent");
       if (pendingCheck) {
-        await confirmAliveCheck(pendingCheck.id, "");
+        await confirmAliveCheck(pendingCheck.id, null);
       }
     }
 

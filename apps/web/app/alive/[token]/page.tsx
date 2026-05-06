@@ -25,7 +25,7 @@ export default function AliveCheckPage({ params }: { params: Promise<{ token: st
     fetch("/api/alive", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, txHash: hash }),
     })
       .then((res) => {
         if (res.ok) {

@@ -19,20 +19,21 @@ export async function getAliveCheckByToken(token: string): Promise<AliveCheck | 
     .from("alive_checks")
     .select("*")
     .eq("token", token)
+    .eq("status", "sent") // prevent replay of already-confirmed or expired tokens
     .single();
 
   if (error || !data) return null;
   return data as AliveCheck;
 }
 
-export async function confirmAliveCheck(id: string, signature: string): Promise<void> {
+export async function confirmAliveCheck(id: string, signature: string | null): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
     .from("alive_checks")
     .update({
       status: "confirmed",
       responded_at: new Date().toISOString(),
-      signature,
+      signature, // null for on-chain verified flows, wallet sig for legacy SIWE flows
     })
     .eq("id", id);
 
