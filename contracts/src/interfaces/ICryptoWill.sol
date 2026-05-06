@@ -28,6 +28,7 @@ interface ICryptoWill {
     error TransferFailed();
     error TooManyTokens();
     error ZeroETHDeposit();
+    error NoETHPending();
 
     // ─── Events ─────────────────────────────────────────────────────────
 
@@ -37,6 +38,10 @@ interface ICryptoWill {
     event WillRevoked(address indexed owner);
     event BeneficiaryUpdated(address indexed owner, address indexed newBeneficiary);
     event ETHDeposited(address indexed owner, uint256 amount);
+    /// @notice Emitted when an individual token transfer fails during executeWill (skipped, not reverted)
+    event TokenTransferFailed(address indexed token, address indexed owner, address indexed beneficiary, uint256 amount);
+    /// @notice Emitted when ETH is made claimable by beneficiary after will execution
+    event ETHPendingClaim(address indexed beneficiary, uint256 amount);
 
     // ─── Functions ──────────────────────────────────────────────────────
 
@@ -62,6 +67,9 @@ interface ICryptoWill {
 
     /// @notice Deposit ETH into the caller's will
     function depositETH() external payable;
+
+    /// @notice Claim ETH owed to the caller from an executed will (pull-payment)
+    function claimETH() external;
 
     /// @notice Get the will details for an owner
     /// @param owner Address of the will owner

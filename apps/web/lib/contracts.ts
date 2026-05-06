@@ -74,6 +74,20 @@ export const CRYPTO_WILL_ABI = [
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "pendingETH",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "claimETH",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 export const ERC20_ABI = [
