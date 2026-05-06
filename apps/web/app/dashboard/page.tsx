@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useWill, useSignAlive, useRevokeWill, useUpdateTokens } from "@/hooks/use-will";
+import { parseEther, formatEther } from "viem";
+import { useWill, useSignAlive, useRevokeWill, useUpdateTokens, useEthBalance, useDepositETH } from "@/hooks/use-will";
 
 function formatTimestamp(timestamp: bigint): string {
   if (!timestamp || timestamp === BigInt(0)) return "Never";
@@ -33,8 +34,13 @@ export default function DashboardPage() {
   const { signAlive, isPending: isSigningAlive, isSuccess: aliveSuccess, hash: aliveHash } = useSignAlive();
   const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess } = useRevokeWill();
   const { updateTokens, isPending: isUpdatingTokens, isSuccess: updateSuccess, error: updateError } = useUpdateTokens();
+  const { balance: depositedETH, refetch: refetchETH } = useEthBalance();
+  const { depositETH, isPending: isDepositing, isSuccess: depositSuccess, error: depositError } = useDepositETH();
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
+  const depositSynced = useRef(false);
+
+  const [ethInput, setEthInput] = useState("");
 
   // Token management local state
   const [localTokens, setLocalTokens] = useState<string[]>([]);
@@ -56,6 +62,14 @@ export default function DashboardPage() {
     refetch();
     setTokensDirty(false);
   }, [updateSuccess, refetch]);
+
+  // After depositETH confirms, refetch balance
+  useEffect(() => {
+    if (!depositSuccess || depositSynced.current) return;
+    depositSynced.current = true;
+    refetchETH();
+    setEthInput("");
+  }, [depositSuccess, refetchETH]);
 
   // After on-chain signAlive confirms, sync DB last_alive_at
   useEffect(() => {
@@ -89,6 +103,20 @@ export default function DashboardPage() {
     if (localTokens.length === 0) return;
     updateTokens(localTokens as `0x${string}`[]);
   };
+
+  const handleDeposit = () => {
+    try {
+      const wei = parseEther(ethInput);
+      if (wei <= BigInt(0)) return;
+      depositETH(wei);
+    } catch {
+      // parseEther throws on invalid input — input validation handles this in the UI
+    }
+  };
+
+  const ethInputValid = (() => {
+    try { return parseEther(ethInput) > BigInt(0); } catch { return false; }
+  })();
 
   return (
     <WalletGuard>
@@ -229,6 +257,51 @@ export default function DashboardPage() {
                 >
                   {isUpdatingTokens ? "Saving..." : "Save Token Changes"}
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* ETH Deposit */}
+            <Card>
+              <CardHeader>
+                <CardTitle>ETH Deposit</CardTitle>
+                <CardDescription>
+                  Only ETH deposited here is covered by your will. Your wallet&apos;s ETH balance
+                  is not automatically included — it stays in your wallet until deposited.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border p-4">
+                  <p className="text-sm text-muted-foreground">Deposited in Contract</p>
+                  <p className="text-xl font-semibold">{formatEther(depositedETH)} ETH</p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    placeholder="Amount in ETH (e.g. 0.5)"
+                    value={ethInput}
+                    onChange={(e) => setEthInput(e.target.value)}
+                  />
+                  <Button
+                    onClick={handleDeposit}
+                    disabled={!ethInputValid || isDepositing}
+                  >
+                    {isDepositing ? "Depositing..." : "Deposit"}
+                  </Button>
+                </div>
+
+                {depositError && (
+                  <p className="text-sm text-destructive">
+                    {depositError.message.slice(0, 120)}
+                  </p>
+                )}
+                {depositSuccess && (
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    ETH deposited. Balance updated.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
