@@ -155,6 +155,16 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
     }
 
     /// @inheritdoc ICryptoWill
+    function updateTokens(address[] calldata newTokens) external onlyWillOwner {
+        if (newTokens.length == 0) revert NoTokensSpecified();
+        if (newTokens.length > MAX_TOKENS) revert TooManyTokens();
+
+        wills[msg.sender].tokens = newTokens;
+
+        emit TokensUpdated(msg.sender, newTokens);
+    }
+
+    /// @inheritdoc ICryptoWill
     function depositETH() external payable onlyWillOwner nonReentrant {
         if (msg.value == 0) revert ZeroETHDeposit();
 
