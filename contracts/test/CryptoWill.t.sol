@@ -691,6 +691,8 @@ contract CryptoWillTest is Test {
     function test_updateTokens_revert_nonOwner() public {
         _createDefaultWill();
 
+        // onlyWillOwner checks wills[msg.sender], so a caller with no will gets WillNotFound.
+        // There is no concept of "wrong owner" — the modifier is keyed to msg.sender, not a parameter.
         address nonOwner = makeAddr("nonOwner");
         address[] memory newTokens = new address[](1);
         newTokens[0] = address(token1);
@@ -698,6 +700,22 @@ contract CryptoWillTest is Test {
         vm.prank(nonOwner);
         vm.expectRevert(ICryptoWill.WillNotFound.selector);
         cryptoWill.updateTokens(newTokens);
+    }
+
+    function test_updateTokens_boundary_maxTokens() public {
+        _createDefaultWill();
+
+        // Exactly MAX_TOKENS (50) should succeed
+        address[] memory newTokens = new address[](50);
+        for (uint256 i = 0; i < 50; i++) {
+            newTokens[i] = address(uint160(i + 1));
+        }
+
+        vm.prank(owner);
+        cryptoWill.updateTokens(newTokens);
+
+        ICryptoWill.Will memory w = cryptoWill.getWill(owner);
+        assertEq(w.tokens.length, 50);
     }
 
     function test_getWill_returnsCorrectData() public {

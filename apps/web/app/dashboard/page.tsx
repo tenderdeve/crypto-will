@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess } = useRevokeWill();
   const { updateTokens, isPending: isUpdatingTokens, isSuccess: updateSuccess, error: updateError } = useUpdateTokens();
   const aliveSynced = useRef(false);
+  const updateSynced = useRef(false);
 
   // Token management local state
   const [localTokens, setLocalTokens] = useState<string[]>([]);
@@ -48,12 +49,12 @@ export default function DashboardPage() {
     }
   }, [will?.tokens]);
 
-  // After updateTokens confirms, refetch will data
+  // After updateTokens confirms, refetch will data (ref guard prevents re-fire on remount)
   useEffect(() => {
-    if (updateSuccess) {
-      refetch();
-      setTokensDirty(false);
-    }
+    if (!updateSuccess || updateSynced.current) return;
+    updateSynced.current = true;
+    refetch();
+    setTokensDirty(false);
   }, [updateSuccess, refetch]);
 
   // After on-chain signAlive confirms, sync DB last_alive_at
@@ -72,7 +73,8 @@ export default function DashboardPage() {
   }, [aliveSuccess, aliveHash, address]);
 
   const addLocalToken = () => {
-    if (!isAddress(tokenInput) || localTokens.includes(tokenInput)) return;
+    const lower = tokenInput.toLowerCase();
+    if (!isAddress(tokenInput) || localTokens.some((t) => t.toLowerCase() === lower)) return;
     setLocalTokens((prev) => [...prev, tokenInput]);
     setTokenInput("");
     setTokensDirty(true);
@@ -196,7 +198,7 @@ export default function DashboardPage() {
                   <Button
                     variant="outline"
                     onClick={addLocalToken}
-                    disabled={!isAddress(tokenInput) || localTokens.includes(tokenInput)}
+                    disabled={!isAddress(tokenInput) || localTokens.some((t) => t.toLowerCase() === tokenInput.toLowerCase())}
                   >
                     + Add
                   </Button>
