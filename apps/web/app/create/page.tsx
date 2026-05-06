@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { isAddress } from "viem";
@@ -26,38 +26,53 @@ function TokenApprovalRow({
   tokenAddress,
   symbol,
   balance,
+  zeroBalanceWarning,
   onRemove,
+  onApprovalChange,
 }: {
   tokenAddress: `0x${string}`;
   symbol?: string;
   balance?: string;
+  zeroBalanceWarning?: boolean;
   onRemove: () => void;
+  onApprovalChange: (addr: string, approved: boolean) => void;
 }) {
   const { isApproved, approve, isPending } = useTokenApproval(tokenAddress);
 
+  useEffect(() => {
+    onApprovalChange(tokenAddress, isApproved);
+  }, [tokenAddress, isApproved, onApprovalChange]);
+
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border p-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{symbol || "Unknown"}</span>
-          {balance && (
-            <span className="text-sm text-muted-foreground">
-              ({Number(balance).toLocaleString(undefined, { maximumFractionDigits: 4 })})
-            </span>
-          )}
+    <div className="rounded-lg border p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{symbol || "Unknown"}</span>
+            {balance && (
+              <span className="text-sm text-muted-foreground">
+                ({Number(balance).toLocaleString(undefined, { maximumFractionDigits: 4 })})
+              </span>
+            )}
+          </div>
+          <code className="text-xs text-muted-foreground truncate block">{tokenAddress}</code>
         </div>
-        <code className="text-xs text-muted-foreground truncate block">{tokenAddress}</code>
-      </div>
-      {isApproved ? (
-        <Badge variant="default">Approved</Badge>
-      ) : (
-        <Button size="sm" onClick={approve} disabled={isPending}>
-          {isPending ? "Approving..." : "Approve"}
+        {isApproved ? (
+          <Badge variant="default">Approved</Badge>
+        ) : (
+          <Button size="sm" onClick={approve} disabled={isPending}>
+            {isPending ? "Approving..." : "Approve"}
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={onRemove}>
+          ✕
         </Button>
+      </div>
+      {zeroBalanceWarning && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          No balance detected. Token is included but won&apos;t transfer if empty at execution.
+        </p>
       )}
-      <Button size="sm" variant="ghost" onClick={onRemove}>
-        ✕
-      </Button>
     </div>
   );
 }
@@ -76,7 +91,20 @@ export default function CreateWillPage() {
   const [tokenInput, setTokenInput] = useState("");
   const [tokens, setTokens] = useState<`0x${string}`[]>([]);
   const [tokenMeta, setTokenMeta] = useState<Record<string, { symbol: string; balance: string }>>({});
+  const [zeroBalanceTokens, setZeroBalanceTokens] = useState<Set<string>>(new Set());
+  const [approvedSet, setApprovedSet] = useState<Set<string>>(new Set());
   const { tokens: detectedTokens, isLoading: tokensLoading } = useWalletTokens();
+
+  const allApproved = tokens.length > 0 && tokens.every((t) => approvedSet.has(t));
+
+  const handleApprovalChange = useCallback((addr: string, approved: boolean) => {
+    setApprovedSet((prev) => {
+      const next = new Set(prev);
+      if (approved) next.add(addr);
+      else next.delete(addr);
+      return next;
+    });
+  }, []);
 
   // Step 3
   const { createWill, isPending, isSuccess, hash, error } = useCreateWill();
@@ -103,7 +131,7 @@ export default function CreateWillPage() {
         email: email || undefined,
       }),
     })
-      .catch(() => {}) // Best effort — will exists on-chain regardless
+      .catch(() => {})
       .finally(() => {
         setDbSaving(false);
         router.push("/dashboard");
@@ -112,17 +140,39 @@ export default function CreateWillPage() {
 
   const addToken = (addr?: `0x${string}`, meta?: { symbol: string; balance: string }) => {
     const tokenAddr = addr || (tokenInput as `0x${string}`);
-    if (isAddress(tokenAddr) && !tokens.includes(tokenAddr)) {
-      setTokens([...tokens, tokenAddr]);
-      if (meta) {
-        setTokenMeta((prev) => ({ ...prev, [tokenAddr]: meta }));
+    if (!isAddress(tokenAddr) || tokens.includes(tokenAddr)) return;
+
+    setTokens((prev) => [...prev, tokenAddr]);
+
+    if (meta) {
+      setTokenMeta((prev) => ({ ...prev, [tokenAddr]: meta }));
+    } else {
+      // Manual add — check if wallet has balance for this token
+      const detected = detectedTokens.find(
+        (t) => t.address.toLowerCase() === tokenAddr.toLowerCase()
+      );
+      if (detected) {
+        setTokenMeta((prev) => ({ ...prev, [tokenAddr]: { symbol: detected.symbol, balance: detected.balance } }));
+      } else {
+        setZeroBalanceTokens((prev) => new Set(prev).add(tokenAddr));
       }
-      setTokenInput("");
     }
+    setTokenInput("");
   };
 
   const removeToken = (index: number) => {
-    setTokens(tokens.filter((_, i) => i !== index));
+    const removed = tokens[index];
+    setTokens((prev) => prev.filter((_, i) => i !== index));
+    setZeroBalanceTokens((prev) => {
+      const next = new Set(prev);
+      next.delete(removed);
+      return next;
+    });
+    setApprovedSet((prev) => {
+      const next = new Set(prev);
+      next.delete(removed);
+      return next;
+    });
   };
 
   const handleCreate = () => {
@@ -134,18 +184,14 @@ export default function CreateWillPage() {
     <WalletGuard>
       <div className="container mx-auto max-w-2xl px-4 py-12">
         <h1 className="text-3xl font-bold mb-2">Create Your Will</h1>
-        <p className="text-muted-foreground mb-8">
-          Step {step} of 3
-        </p>
+        <p className="text-muted-foreground mb-8">Step {step} of 3</p>
 
         {/* Progress bar */}
         <div className="flex gap-2 mb-8">
           {[1, 2, 3].map((s) => (
             <div
               key={s}
-              className={`h-2 flex-1 rounded-full ${
-                s <= step ? "bg-primary" : "bg-muted"
-              }`}
+              className={`h-2 flex-1 rounded-full ${s <= step ? "bg-primary" : "bg-muted"}`}
             />
           ))}
         </div>
@@ -227,11 +273,10 @@ export default function CreateWillPage() {
             <CardHeader>
               <CardTitle>Select & Approve Tokens</CardTitle>
               <CardDescription>
-                Select tokens from your wallet to include in your will. Approve each one so the contract can transfer them.
+                Add tokens and approve each one. All must be approved before proceeding.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Auto-detected tokens */}
               {tokensLoading && (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Detecting tokens in your wallet...
@@ -255,7 +300,7 @@ export default function CreateWillPage() {
                             {Number(t.balance).toLocaleString(undefined, { maximumFractionDigits: 4 })}
                           </span>
                         </div>
-                        <Button size="sm" variant="outline">
+                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); addToken(t.address, { symbol: t.symbol, balance: t.balance }); }}>
                           + Add
                         </Button>
                       </div>
@@ -263,23 +308,30 @@ export default function CreateWillPage() {
                 </div>
               )}
 
-              {/* Selected tokens with approval */}
               {tokens.length > 0 && (
                 <div className="space-y-2">
-                  <Label>Selected — Approve Each Token</Label>
+                  <Label>
+                    Selected — Approve Each Token
+                    {tokens.length > 0 && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        ({approvedSet.size}/{tokens.length} approved)
+                      </span>
+                    )}
+                  </Label>
                   {tokens.map((token, i) => (
                     <TokenApprovalRow
                       key={token}
                       tokenAddress={token}
                       symbol={tokenMeta[token]?.symbol}
                       balance={tokenMeta[token]?.balance}
+                      zeroBalanceWarning={zeroBalanceTokens.has(token)}
                       onRemove={() => removeToken(i)}
+                      onApprovalChange={handleApprovalChange}
                     />
                   ))}
                 </div>
               )}
 
-              {/* Manual add fallback */}
               <div className="border-t pt-4">
                 <Label className="text-sm text-muted-foreground">Add token manually</Label>
                 <div className="flex gap-2 mt-2">
@@ -307,9 +359,12 @@ export default function CreateWillPage() {
                 <Button
                   className="flex-1"
                   onClick={() => setStep(3)}
-                  disabled={tokens.length === 0}
+                  disabled={tokens.length === 0 || !allApproved}
+                  title={!allApproved ? "Approve all tokens before proceeding" : undefined}
                 >
-                  Next: Review & Create
+                  {!allApproved && tokens.length > 0
+                    ? `Approve all tokens (${approvedSet.size}/${tokens.length})`
+                    : "Next: Review & Create"}
                 </Button>
               </div>
             </CardContent>
@@ -339,7 +394,12 @@ export default function CreateWillPage() {
                   <p className="text-sm text-muted-foreground">Tokens ({tokens.length})</p>
                   <div className="space-y-1 mt-1">
                     {tokens.map((t) => (
-                      <code key={t} className="text-xs block truncate">{t}</code>
+                      <div key={t} className="flex items-center gap-2">
+                        <code className="text-xs truncate">{t}</code>
+                        {zeroBalanceTokens.has(t) && (
+                          <span className="text-xs text-amber-600 shrink-0">⚠ no balance</span>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -349,7 +409,9 @@ export default function CreateWillPage() {
                 </div>
                 <div className="rounded-md bg-muted/50 p-3">
                   <p className="text-xs text-muted-foreground">
-                    Note: Only ERC-20 tokens listed above are covered. Your wallet&apos;s native ETH is not automatically included — deposit ETH separately from the dashboard after creation.
+                    Note: Only ERC-20 tokens listed above are covered. Your wallet&apos;s native ETH
+                    is not automatically included — deposit ETH separately from the dashboard after
+                    creation.
                   </p>
                 </div>
               </div>
@@ -363,7 +425,11 @@ export default function CreateWillPage() {
               )}
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(2)} disabled={isPending || dbSaving}>
+                <Button
+                  variant="outline"
+                  onClick={() => setStep(2)}
+                  disabled={isPending || dbSaving}
+                >
                   Back
                 </Button>
                 <Button
