@@ -38,7 +38,6 @@ export default function DashboardPage() {
   const { depositETH, isPending: isDepositing, isSuccess: depositSuccess, error: depositError } = useDepositETH();
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
-  const depositSynced = useRef(false);
 
   const [ethInput, setEthInput] = useState("");
 
@@ -63,10 +62,11 @@ export default function DashboardPage() {
     setTokensDirty(false);
   }, [updateSuccess, refetch]);
 
-  // After depositETH confirms, refetch balance
+  // After depositETH confirms, refetch balance.
+  // No ref guard needed — isSuccess resets when a new write is initiated, so this
+  // fires exactly once per confirmed deposit and is safe to repeat across sessions.
   useEffect(() => {
-    if (!depositSuccess || depositSynced.current) return;
-    depositSynced.current = true;
+    if (!depositSuccess) return;
     refetchETH();
     setEthInput("");
   }, [depositSuccess, refetchETH]);
