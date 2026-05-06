@@ -42,6 +42,8 @@ interface ICryptoWill {
     event TokenTransferFailed(address indexed token, address indexed owner, address indexed beneficiary, uint256 amount);
     /// @notice Emitted when ETH is made claimable by beneficiary after will execution
     event ETHPendingClaim(address indexed beneficiary, uint256 amount);
+    /// @notice Emitted when a beneficiary successfully claims their pending ETH
+    event ETHClaimed(address indexed beneficiary, uint256 amount);
 
     // ─── Functions ──────────────────────────────────────────────────────
 

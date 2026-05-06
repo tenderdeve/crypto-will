@@ -453,7 +453,10 @@ contract CryptoWillTest is Test {
 
         vm.warp(block.timestamp + GRACE_PERIOD + 1);
 
-        // Should not revert even though badToken always reverts
+        // Expect TokenTransferFailed emitted for the bad token
+        vm.expectEmit(true, true, true, true);
+        emit ICryptoWill.TokenTransferFailed(address(badToken), owner, beneficiary, 100 ether);
+
         vm.prank(executor);
         cryptoWill.executeWill(owner);
 
@@ -481,6 +484,10 @@ contract CryptoWillTest is Test {
         vm.stopPrank();
 
         vm.warp(block.timestamp + GRACE_PERIOD + 1);
+
+        // Expect TokenTransferFailed for the false-returning token
+        vm.expectEmit(true, true, true, true);
+        emit ICryptoWill.TokenTransferFailed(address(falseToken), owner, beneficiary, 100 ether);
 
         vm.prank(executor);
         cryptoWill.executeWill(owner);

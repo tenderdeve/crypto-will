@@ -173,6 +173,8 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
 
         (bool success,) = msg.sender.call{value: amount}("");
         if (!success) revert TransferFailed();
+
+        emit ETHClaimed(msg.sender, amount);
     }
 
     /// @inheritdoc ICryptoWill
