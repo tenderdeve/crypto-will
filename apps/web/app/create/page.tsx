@@ -314,7 +314,7 @@ export default function CreateWillPage() {
                     Selected — Approve Each Token
                     {tokens.length > 0 && (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        ({approvedSet.size}/{tokens.length} approved)
+                        ({Math.min(approvedSet.size, tokens.length)}/{tokens.length} approved)
                       </span>
                     )}
                   </Label>
@@ -363,7 +363,7 @@ export default function CreateWillPage() {
                   title={!allApproved ? "Approve all tokens before proceeding" : undefined}
                 >
                   {!allApproved && tokens.length > 0
-                    ? `Approve all tokens (${approvedSet.size}/${tokens.length})`
+                    ? `Approve all tokens (${Math.min(approvedSet.size, tokens.length)}/${tokens.length})`
                     : "Next: Review & Create"}
                 </Button>
               </div>

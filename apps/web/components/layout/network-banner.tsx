@@ -3,7 +3,7 @@
 import { useAccount, useSwitchChain } from "wagmi";
 import { Button } from "@/components/ui/button";
 
-const EXPECTED_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "84532");
+const EXPECTED_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "84532");
 
 const CHAIN_NAMES: Record<number, string> = {
   31337: "Localhost (Anvil)",
