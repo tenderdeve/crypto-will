@@ -252,6 +252,15 @@ export default function CreateWillPage() {
                 </p>
               </div>
 
+              <div className="rounded-md bg-muted/50 border p-3 space-y-1">
+                <p className="text-xs font-medium">About ETH coverage</p>
+                <p className="text-xs text-muted-foreground">
+                  Your wallet&apos;s ETH balance is <strong>not</strong> automatically included in your will.
+                  Only ETH you manually deposit into the contract (from your dashboard after creation) is covered.
+                  ERC-20 tokens you select and approve in the next step are included automatically at execution time.
+                </p>
+              </div>
+
               <Button
                 className="w-full"
                 onClick={() => setStep(2)}

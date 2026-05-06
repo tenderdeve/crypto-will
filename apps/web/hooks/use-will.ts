@@ -55,6 +55,39 @@ export function useRevokeWill() {
   return { revokeWill, isPending: isPending || isConfirming, isSuccess, hash };
 }
 
+export function useEthBalance() {
+  const { address } = useAccount();
+
+  const { data: balance, refetch } = useReadContract({
+    address: CRYPTO_WILL_ADDRESS,
+    abi: CRYPTO_WILL_ABI,
+    functionName: "ethBalances",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  return { balance: balance ?? BigInt(0), refetch };
+}
+
+export function useDepositETH() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const depositETH = (valueWei: bigint) => {
+    writeContract({
+      address: CRYPTO_WILL_ADDRESS,
+      abi: CRYPTO_WILL_ABI,
+      functionName: "depositETH",
+      value: valueWei,
+    });
+  };
+
+  return { depositETH, isPending: isPending || isConfirming, isSuccess, error };
+}
+
 export function useUpdateTokens() {
   const { writeContract, data: hash, isPending, error } = useWriteContract();
 
