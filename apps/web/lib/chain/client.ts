@@ -1,10 +1,15 @@
 import { createPublicClient, createWalletClient, http } from "viem";
-import { baseSepolia } from "viem/chains";
+import { baseSepolia, localhost } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
+
+function getChain() {
+  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "84532");
+  return chainId === 31337 ? localhost : baseSepolia;
+}
 
 export function getPublicClient() {
   return createPublicClient({
-    chain: baseSepolia,
+    chain: getChain(),
     transport: http(process.env.BASE_RPC_URL),
   });
 }
@@ -15,7 +20,7 @@ export function getWalletClient() {
 
   return createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: getChain(),
     transport: http(process.env.BASE_RPC_URL),
   });
 }
