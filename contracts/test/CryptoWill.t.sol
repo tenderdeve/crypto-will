@@ -635,6 +635,71 @@ contract CryptoWillTest is Test {
         assertEq(beneficiary.balance, 5 ether);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  updateTokens (issue #36)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function test_updateTokens_success() public {
+        _createDefaultWill(); // tokens: [token1, token2]
+
+        address[] memory newTokens = new address[](1);
+        newTokens[0] = address(token3);
+
+        vm.expectEmit(true, false, false, true);
+        emit ICryptoWill.TokensUpdated(owner, newTokens);
+
+        vm.prank(owner);
+        cryptoWill.updateTokens(newTokens);
+
+        ICryptoWill.Will memory w = cryptoWill.getWill(owner);
+        assertEq(w.tokens.length, 1);
+        assertEq(w.tokens[0], address(token3));
+    }
+
+    function test_updateTokens_revert_noWill() public {
+        address[] memory newTokens = new address[](1);
+        newTokens[0] = address(token1);
+
+        vm.prank(owner);
+        vm.expectRevert(ICryptoWill.WillNotFound.selector);
+        cryptoWill.updateTokens(newTokens);
+    }
+
+    function test_updateTokens_revert_noTokens() public {
+        _createDefaultWill();
+
+        address[] memory newTokens = new address[](0);
+
+        vm.prank(owner);
+        vm.expectRevert(ICryptoWill.NoTokensSpecified.selector);
+        cryptoWill.updateTokens(newTokens);
+    }
+
+    function test_updateTokens_revert_tooManyTokens() public {
+        _createDefaultWill();
+
+        address[] memory newTokens = new address[](51);
+        for (uint256 i = 0; i < 51; i++) {
+            newTokens[i] = address(uint160(i + 1));
+        }
+
+        vm.prank(owner);
+        vm.expectRevert(ICryptoWill.TooManyTokens.selector);
+        cryptoWill.updateTokens(newTokens);
+    }
+
+    function test_updateTokens_revert_nonOwner() public {
+        _createDefaultWill();
+
+        address nonOwner = makeAddr("nonOwner");
+        address[] memory newTokens = new address[](1);
+        newTokens[0] = address(token1);
+
+        vm.prank(nonOwner);
+        vm.expectRevert(ICryptoWill.WillNotFound.selector);
+        cryptoWill.updateTokens(newTokens);
+    }
+
     function test_getWill_returnsCorrectData() public {
         _createDefaultWill();
 

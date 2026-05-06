@@ -42,6 +42,13 @@ export const CRYPTO_WILL_ABI = [
   },
   {
     type: "function",
+    name: "updateTokens",
+    inputs: [{ name: "newTokens", type: "address[]" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "depositETH",
     inputs: [],
     outputs: [],

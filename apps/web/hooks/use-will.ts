@@ -54,3 +54,22 @@ export function useRevokeWill() {
 
   return { revokeWill, isPending: isPending || isConfirming, isSuccess, hash };
 }
+
+export function useUpdateTokens() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const updateTokens = (newTokens: `0x${string}`[]) => {
+    writeContract({
+      address: CRYPTO_WILL_ADDRESS,
+      abi: CRYPTO_WILL_ABI,
+      functionName: "updateTokens",
+      args: [newTokens],
+    });
+  };
+
+  return { updateTokens, isPending: isPending || isConfirming, isSuccess, error };
+}

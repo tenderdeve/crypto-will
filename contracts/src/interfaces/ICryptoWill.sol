@@ -38,6 +38,8 @@ interface ICryptoWill {
     event WillRevoked(address indexed owner);
     event BeneficiaryUpdated(address indexed owner, address indexed newBeneficiary);
     event ETHDeposited(address indexed owner, uint256 amount);
+    /// @notice Emitted when the token list for a will is updated
+    event TokensUpdated(address indexed owner, address[] newTokens);
     /// @notice Emitted when an individual token transfer fails during executeWill (skipped, not reverted)
     event TokenTransferFailed(address indexed token, address indexed owner, address indexed beneficiary, uint256 amount);
     /// @notice Emitted when ETH is made claimable by beneficiary after will execution
@@ -66,6 +68,10 @@ interface ICryptoWill {
     /// @notice Update the beneficiary of the caller's will
     /// @param newBeneficiary New beneficiary address
     function updateBeneficiary(address newBeneficiary) external;
+
+    /// @notice Replace the token list for the caller's will
+    /// @param newTokens New array of ERC-20 token addresses (must be pre-approved separately)
+    function updateTokens(address[] calldata newTokens) external;
 
     /// @notice Deposit ETH into the caller's will
     function depositETH() external payable;
