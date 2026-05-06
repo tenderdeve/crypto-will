@@ -2,6 +2,7 @@
 
 import { useAccount } from "wagmi";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { WalletGuard } from "@/components/wallet/wallet-guard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,22 @@ export default function DashboardPage() {
   const { will, hasWill, isLoading } = useWill();
   const { signAlive, isPending: isSigningAlive, isSuccess: aliveSuccess } = useSignAlive();
   const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess } = useRevokeWill();
+  const aliveSynced = useRef(false);
+
+  // After on-chain signAlive confirms, sync DB last_alive_at
+  useEffect(() => {
+    if (!aliveSuccess || !address || aliveSynced.current) return;
+    aliveSynced.current = true;
+
+    fetch("/api/alive", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-wallet-address": address,
+      },
+      body: JSON.stringify({ source: "dashboard" }),
+    }).catch(() => {}); // Best effort
+  }, [aliveSuccess, address]);
 
   return (
     <WalletGuard>

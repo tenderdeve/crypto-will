@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createWillSchema } from "@/lib/validations/schemas";
 import { createWill, getWillByUserId } from "@/lib/db/queries/wills";
-import { getUserByWallet } from "@/lib/db/queries/users";
+import { getUserByWallet, createUser, updateUserEmail } from "@/lib/db/queries/users";
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,12 +23,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await getUserByWallet(walletAddress.toLowerCase());
+    // Upsert user — create if not found, update email if provided and missing
+    let user = await getUserByWallet(walletAddress.toLowerCase());
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found", code: "USER_NOT_FOUND" },
-        { status: 404 }
-      );
+      user = await createUser(walletAddress.toLowerCase(), parsed.data.email);
+    } else if (parsed.data.email && !user.email) {
+      await updateUserEmail(user.id, parsed.data.email);
+      user = { ...user, email: parsed.data.email };
     }
 
     const will = await createWill({

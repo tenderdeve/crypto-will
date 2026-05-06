@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWillById, updateWillAlive } from "@/lib/db/queries/wills";
+import { getWillById, getWillByUserId, updateWillAlive } from "@/lib/db/queries/wills";
 import { confirmAliveCheck, getAliveCheckByToken, getAliveChecksByWillId } from "@/lib/db/queries/alive-checks";
+import { getUserByWallet } from "@/lib/db/queries/users";
 import { z } from "zod";
 
 const aliveCheckBodySchema = z.union([
+  // Email link flow: token from the email link (on-chain signAlive already called)
+  z.object({ token: z.string().min(1) }),
+  // Dashboard flow: on-chain signAlive already called, sync DB via wallet header
+  z.object({ source: z.literal("dashboard") }),
+  // Legacy: signature + willId
   z.object({ signature: z.string().min(1), willId: z.string().uuid() }),
-  z.object({ signature: z.string().min(1), token: z.string().min(1) }),
 ]);
 
 export async function POST(request: NextRequest) {
@@ -20,12 +25,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { signature } = parsed.data;
     let willId: string;
     let aliveCheckId: string | undefined;
 
-    // Support both willId-based and token-based lookups
     if ("token" in parsed.data) {
+      // Email link: look up the alive_check by token
       const aliveCheck = await getAliveCheckByToken(parsed.data.token);
       if (!aliveCheck) {
         return NextResponse.json(
@@ -35,8 +39,33 @@ export async function POST(request: NextRequest) {
       }
       willId = aliveCheck.will_id;
       aliveCheckId = aliveCheck.id;
+    } else if ("source" in parsed.data && parsed.data.source === "dashboard") {
+      // Dashboard: resolve will from x-wallet-address header
+      const walletAddress = request.headers.get("x-wallet-address");
+      if (!walletAddress) {
+        return NextResponse.json(
+          { error: "Missing wallet address", code: "AUTH_REQUIRED" },
+          { status: 401 }
+        );
+      }
+      const user = await getUserByWallet(walletAddress.toLowerCase());
+      if (!user) {
+        return NextResponse.json(
+          { error: "User not found", code: "USER_NOT_FOUND" },
+          { status: 404 }
+        );
+      }
+      const will = await getWillByUserId(user.id);
+      if (!will) {
+        return NextResponse.json(
+          { error: "Will not found", code: "NOT_FOUND" },
+          { status: 404 }
+        );
+      }
+      willId = will.id;
     } else {
-      willId = parsed.data.willId;
+      // Legacy willId-based
+      willId = (parsed.data as { willId: string }).willId;
     }
 
     const will = await getWillById(willId);
@@ -54,18 +83,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Confirm the alive check record
+    // Confirm any pending alive check record
     if (aliveCheckId) {
-      await confirmAliveCheck(aliveCheckId, signature);
+      await confirmAliveCheck(aliveCheckId, "");
     } else {
       const checks = await getAliveChecksByWillId(willId);
       const pendingCheck = checks.find((c) => c.status === "sent");
       if (pendingCheck) {
-        await confirmAliveCheck(pendingCheck.id, signature);
+        await confirmAliveCheck(pendingCheck.id, "");
       }
     }
 
-    // Update will's last alive timestamp
     await updateWillAlive(willId);
 
     return NextResponse.json({ success: true, message: "Alive check confirmed" });

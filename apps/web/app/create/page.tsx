@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { isAddress } from "viem";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useTokenApproval } from "@/hooks/use-token-approval";
 import { useCreateWill } from "@/hooks/use-create-will";
+import { useWalletTokens } from "@/hooks/use-wallet-tokens";
 
 const GRACE_PERIOD_OPTIONS = [
   { label: "30 days", value: 30 },
@@ -21,12 +22,32 @@ const GRACE_PERIOD_OPTIONS = [
   { label: "180 days", value: 180 },
 ];
 
-function TokenApprovalRow({ tokenAddress, onRemove }: { tokenAddress: `0x${string}`; onRemove: () => void }) {
+function TokenApprovalRow({
+  tokenAddress,
+  symbol,
+  balance,
+  onRemove,
+}: {
+  tokenAddress: `0x${string}`;
+  symbol?: string;
+  balance?: string;
+  onRemove: () => void;
+}) {
   const { isApproved, approve, isPending } = useTokenApproval(tokenAddress);
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border p-3">
-      <code className="text-sm truncate flex-1">{tokenAddress}</code>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{symbol || "Unknown"}</span>
+          {balance && (
+            <span className="text-sm text-muted-foreground">
+              ({Number(balance).toLocaleString(undefined, { maximumFractionDigits: 4 })})
+            </span>
+          )}
+        </div>
+        <code className="text-xs text-muted-foreground truncate block">{tokenAddress}</code>
+      </div>
       {isApproved ? (
         <Badge variant="default">Approved</Badge>
       ) : (
@@ -54,13 +75,48 @@ export default function CreateWillPage() {
   // Step 2 state
   const [tokenInput, setTokenInput] = useState("");
   const [tokens, setTokens] = useState<`0x${string}`[]>([]);
+  const [tokenMeta, setTokenMeta] = useState<Record<string, { symbol: string; balance: string }>>({});
+  const { tokens: detectedTokens, isLoading: tokensLoading } = useWalletTokens();
 
   // Step 3
-  const { createWill, isPending, isSuccess, error } = useCreateWill();
+  const { createWill, isPending, isSuccess, hash, error } = useCreateWill();
+  const [dbSaving, setDbSaving] = useState(false);
+  const dbSaveAttempted = useRef(false);
 
-  const addToken = () => {
-    if (isAddress(tokenInput) && !tokens.includes(tokenInput as `0x${string}`)) {
-      setTokens([...tokens, tokenInput as `0x${string}`]);
+  // After on-chain tx confirms, save will metadata to DB then redirect
+  useEffect(() => {
+    if (!isSuccess || !hash || !address || dbSaveAttempted.current) return;
+    dbSaveAttempted.current = true;
+    setDbSaving(true);
+
+    fetch("/api/will", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-wallet-address": address,
+      },
+      body: JSON.stringify({
+        beneficiaryAddress: beneficiary,
+        tokenAddresses: tokens,
+        gracePeriodDays: gracePeriod,
+        contractTxHash: hash,
+        email: email || undefined,
+      }),
+    })
+      .catch(() => {}) // Best effort — will exists on-chain regardless
+      .finally(() => {
+        setDbSaving(false);
+        router.push("/dashboard");
+      });
+  }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, router]);
+
+  const addToken = (addr?: `0x${string}`, meta?: { symbol: string; balance: string }) => {
+    const tokenAddr = addr || (tokenInput as `0x${string}`);
+    if (isAddress(tokenAddr) && !tokens.includes(tokenAddr)) {
+      setTokens([...tokens, tokenAddr]);
+      if (meta) {
+        setTokenMeta((prev) => ({ ...prev, [tokenAddr]: meta }));
+      }
       setTokenInput("");
     }
   };
@@ -73,10 +129,6 @@ export default function CreateWillPage() {
     const gracePeriodSeconds = BigInt(gracePeriod * 24 * 60 * 60);
     createWill(beneficiary as `0x${string}`, tokens, gracePeriodSeconds);
   };
-
-  if (isSuccess) {
-    router.push("/dashboard");
-  }
 
   return (
     <WalletGuard>
@@ -175,36 +227,76 @@ export default function CreateWillPage() {
             <CardHeader>
               <CardTitle>Select & Approve Tokens</CardTitle>
               <CardDescription>
-                Add ERC-20 token addresses and approve the contract to transfer them.
+                Select tokens from your wallet to include in your will. Approve each one so the contract can transfer them.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Token contract address (0x...)"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                />
-                <Button onClick={addToken} disabled={!isAddress(tokenInput)}>
-                  Add
-                </Button>
-              </div>
+              {/* Auto-detected tokens */}
+              {tokensLoading && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Detecting tokens in your wallet...
+                </p>
+              )}
 
+              {!tokensLoading && detectedTokens.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Your Tokens</Label>
+                  {detectedTokens
+                    .filter((t) => !tokens.includes(t.address))
+                    .map((t) => (
+                      <div
+                        key={t.address}
+                        className="flex items-center justify-between gap-2 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => addToken(t.address, { symbol: t.symbol, balance: t.balance })}
+                      >
+                        <div>
+                          <span className="font-medium">{t.symbol}</span>
+                          <span className="text-sm text-muted-foreground ml-2">
+                            {Number(t.balance).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                          </span>
+                        </div>
+                        <Button size="sm" variant="outline">
+                          + Add
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Selected tokens with approval */}
               {tokens.length > 0 && (
                 <div className="space-y-2">
+                  <Label>Selected — Approve Each Token</Label>
                   {tokens.map((token, i) => (
                     <TokenApprovalRow
                       key={token}
                       tokenAddress={token}
+                      symbol={tokenMeta[token]?.symbol}
+                      balance={tokenMeta[token]?.balance}
                       onRemove={() => removeToken(i)}
                     />
                   ))}
                 </div>
               )}
 
-              {tokens.length === 0 && (
+              {/* Manual add fallback */}
+              <div className="border-t pt-4">
+                <Label className="text-sm text-muted-foreground">Add token manually</Label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    placeholder="Token contract address (0x...)"
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                  />
+                  <Button onClick={() => addToken()} disabled={!isAddress(tokenInput)}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {tokens.length === 0 && !tokensLoading && detectedTokens.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No tokens added yet. Enter a token contract address above.
+                  No tokens detected. Add token addresses manually above.
                 </p>
               )}
 
@@ -255,6 +347,11 @@ export default function CreateWillPage() {
                   <p className="text-sm text-muted-foreground">Email</p>
                   <p>{email}</p>
                 </div>
+                <div className="rounded-md bg-muted/50 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Note: Only ERC-20 tokens listed above are covered. Your wallet&apos;s native ETH is not automatically included — deposit ETH separately from the dashboard after creation.
+                  </p>
+                </div>
               </div>
 
               {error && (
@@ -266,15 +363,15 @@ export default function CreateWillPage() {
               )}
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(2)}>
+                <Button variant="outline" onClick={() => setStep(2)} disabled={isPending || dbSaving}>
                   Back
                 </Button>
                 <Button
                   className="flex-1"
                   onClick={handleCreate}
-                  disabled={isPending}
+                  disabled={isPending || dbSaving}
                 >
-                  {isPending ? "Creating Will..." : "Create Will"}
+                  {dbSaving ? "Saving..." : isPending ? "Creating Will..." : "Create Will"}
                 </Button>
               </div>
             </CardContent>
