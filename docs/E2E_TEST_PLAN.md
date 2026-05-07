@@ -117,7 +117,7 @@ cast rpc anvil_mine 1
 
 1. From EXECUTOR_WALLET, call `executeWill(OWNER_WALLET)`:
    ```bash
-   cast send $CONTRACT executeWill(address) $OWNER_WALLET \
+   cast send $CONTRACT "executeWill(address)" $OWNER_WALLET \
      --rpc-url http://127.0.0.1:8545 \
      --private-key $EXECUTOR_PRIVATE_KEY
    ```

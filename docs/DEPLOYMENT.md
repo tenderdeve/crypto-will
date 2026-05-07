@@ -18,6 +18,11 @@ PRIVATE_KEY=0x...       # deployer wallet private key (never commit this)
 BASESCAN_API_KEY=...
 ```
 
+> **Security note:** `$PRIVATE_KEY` will appear in shell history.
+> Use `export HISTIGNORE='*PRIVATE_KEY*'` before setting it, or use a
+> Foundry keystore account: `cast wallet import deployer --interactive`
+> then replace `$PRIVATE_KEY` with `--account deployer` in the commands below.
+
 ---
 
 ## 2. Build and test
@@ -34,10 +39,13 @@ All 42 tests must pass before deploying.
 
 ## 3. Deploy to Base Sepolia
 
+The deploy script reads `PRIVATE_KEY` from env via `vm.envUint` — do not pass
+`--private-key` to avoid diverging the logged deployer address.
+
 ```bash
+cd contracts
 forge script script/Deploy.s.sol \
   --rpc-url base_sepolia \
-  --private-key $PRIVATE_KEY \
   --broadcast \
   --verify \
   --etherscan-api-key $BASESCAN_API_KEY
@@ -57,12 +65,14 @@ Broadcast artifacts are saved to `contracts/broadcast/Deploy.s.sol/84532/`.
 
 ## 4. Verify on Basescan (if --verify flag failed)
 
+Run from inside the `contracts/` directory:
+
 ```bash
 forge verify-contract \
   --chain-id 84532 \
   --etherscan-api-key $BASESCAN_API_KEY \
   <DEPLOYED_ADDRESS> \
-  contracts/src/CryptoWill.sol:CryptoWill
+  src/CryptoWill.sol:CryptoWill
 ```
 
 View on Basescan: `https://sepolia.basescan.org/address/<DEPLOYED_ADDRESS>`
@@ -71,12 +81,12 @@ View on Basescan: `https://sepolia.basescan.org/address/<DEPLOYED_ADDRESS>`
 
 ## 5. Deploy to Base Mainnet
 
-Same command with `--rpc-url base` and `--chain 8453`.
+Same command with `--rpc-url base`.
 
 ```bash
+cd contracts
 forge script script/Deploy.s.sol \
   --rpc-url base \
-  --private-key $PRIVATE_KEY \
   --broadcast \
   --verify \
   --etherscan-api-key $BASESCAN_API_KEY
