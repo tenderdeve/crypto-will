@@ -39,7 +39,7 @@ export default function DashboardPage() {
   const { address } = useAccount();
   const { will, hasWill, isLoading, refetch } = useWill();
   const { signAlive, isPending: isSigningAlive, isSuccess: aliveSuccess, hash: aliveHash } = useSignAlive();
-  const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess } = useRevokeWill();
+  const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess, error: revokeError } = useRevokeWill();
   const { updateTokens, isPending: isUpdatingTokens, isSuccess: updateSuccess, error: updateError } = useUpdateTokens();
   const { balance: depositedETH, refetch: refetchETH } = useEthBalance();
   const { depositETH, isPending: isDepositing, isSuccess: depositSuccess, error: depositError } = useDepositETH();
@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const updateSynced = useRef(false);
   const revokeSynced = useRef(false);
   const beneficiarySynced = useRef(false);
+  // Latch prevents double-submit on fast double-click before isPending flips
+  const revokeClicked = useRef(false);
 
   // Token management state
   const [localTokens, setLocalTokens] = useState<string[]>([]);
@@ -95,13 +97,20 @@ export default function DashboardPage() {
     setNewBeneficiary("");
   }, [beneficiarySuccess, refetch]);
 
+  // Close confirmation dialog and reset latch on tx failure
+  useEffect(() => {
+    if (!revokeError) return;
+    setRevokeConfirm(false);
+    revokeClicked.current = false;
+  }, [revokeError]);
+
   // After revokeWill confirms, sync DB status to "revoked"
   useEffect(() => {
     if (!revokeSuccess || !address || revokeSynced.current) return;
     revokeSynced.current = true;
     setRevokeConfirm(false);
 
-    // Fetch DB will id then mark revoked
+    // Fetch DB will id then mark revoked (best effort — on-chain is source of truth)
     fetch("/api/will", {
       headers: { "x-wallet-address": address },
     })
@@ -109,9 +118,12 @@ export default function DashboardPage() {
       .then((data) => {
         const willId = data?.wills?.[0]?.id;
         if (!willId) return;
-        return fetch(`/api/will/${willId}`, { method: "DELETE" });
+        return fetch(`/api/will/${willId}`, {
+          method: "DELETE",
+          headers: { "x-wallet-address": address },
+        });
       })
-      .catch(() => {}); // Best effort — on-chain revoke is source of truth
+      .catch(() => {});
   }, [revokeSuccess, address]);
 
   // After on-chain signAlive confirms, sync DB last_alive_at
@@ -413,7 +425,11 @@ export default function DashboardPage() {
                       </Button>
                       <Button
                         variant="destructive"
-                        onClick={revokeWill}
+                        onClick={() => {
+                          if (revokeClicked.current) return;
+                          revokeClicked.current = true;
+                          revokeWill();
+                        }}
                         className="flex-1"
                         disabled={isRevoking}
                       >

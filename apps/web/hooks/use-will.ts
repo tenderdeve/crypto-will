@@ -38,7 +38,7 @@ export function useSignAlive() {
 }
 
 export function useRevokeWill() {
-  const { writeContract, data: hash, isPending } = useWriteContract();
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -52,7 +52,7 @@ export function useRevokeWill() {
     });
   };
 
-  return { revokeWill, isPending: isPending || isConfirming, isSuccess, hash };
+  return { revokeWill, isPending: isPending || isConfirming, isSuccess, error, hash };
 }
 
 export function useEthBalance() {
