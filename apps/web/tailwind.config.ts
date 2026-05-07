@@ -2,7 +2,6 @@ import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
-  darkMode: ["class"],
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
@@ -16,45 +15,85 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        serif: ["var(--font-serif)", "Instrument Serif", "Georgia", "serif"],
+        sans: ["var(--font-sans)", "Inter Tight", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "JetBrains Mono", "ui-monospace", "monospace"],
+      },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        border: "var(--border)",
+        input: "var(--input)",
+        ring: "var(--ring)",
+        background: "var(--background)",
+        foreground: "var(--foreground)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "var(--primary)",
+          foreground: "var(--primary-foreground)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
+          DEFAULT: "var(--secondary)",
+          foreground: "var(--secondary-foreground)",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "var(--destructive)",
+          foreground: "var(--destructive-foreground)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "var(--muted)",
+          foreground: "var(--muted-foreground)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "var(--accent)",
+          foreground: "var(--accent-foreground)",
+          soft: "var(--accent-soft)",
+          ink: "var(--accent-ink)",
         },
         popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+          DEFAULT: "var(--popover)",
+          foreground: "var(--popover-foreground)",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "var(--card)",
+          foreground: "var(--card-foreground)",
         },
+        // Design system colors
+        bg: {
+          DEFAULT: "var(--bg)",
+          2: "var(--bg-2)",
+        },
+        paper: "var(--paper)",
+        ink: {
+          DEFAULT: "var(--ink)",
+          2: "var(--ink-2)",
+          3: "var(--ink-3)",
+        },
+        line: {
+          DEFAULT: "var(--line)",
+          2: "var(--line-2)",
+        },
+        good: "var(--good)",
+        warn: "var(--warn)",
+        danger: "var(--danger)",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        chips: "8px",
+        inputs: "12px",
+        cards: "16px",
+        "cards-lg": "18px",
+        hero: "20px",
+        "hero-lg": "24px",
+        pill: "999px",
+      },
+      boxShadow: {
+        elevated: "0 30px 60px -30px rgba(34,29,23,0.18)",
+        "elevated-lg": "0 40px 80px -20px rgba(34,29,23,0.4)",
+      },
+      spacing: {
+        "18": "4.5rem",
+        "22": "5.5rem",
       },
     },
   },

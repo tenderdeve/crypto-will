@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ICryptoWill} from "./interfaces/ICryptoWill.sol";
 
 /// @title CryptoWill
@@ -10,7 +12,7 @@ import {ICryptoWill} from "./interfaces/ICryptoWill.sol";
 ///         transfer ERC-20 tokens and ETH to a beneficiary after a grace period expires.
 /// @dev Approval-based for ERC-20 tokens (non-custodial). Custodial for ETH deposits only.
 ///      ETH is distributed via pull-payment to avoid beneficiary contract compatibility issues.
-contract CryptoWill is ICryptoWill, ReentrancyGuard {
+contract CryptoWill is ICryptoWill, ReentrancyGuard, EIP712 {
     // ─── Constants ──────────────────────────────────────────────────────
 
     /// @notice Minimum grace period: 30 days
@@ -18,6 +20,10 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
 
     /// @notice Maximum number of tokens per will (prevents gas limit DoS)
     uint256 public constant MAX_TOKENS = 50;
+
+    /// @notice EIP-712 typehash for AliveProof struct
+    bytes32 public constant ALIVE_TYPEHASH =
+        keccak256("AliveProof(address owner,uint256 nonce,uint256 issuedAt)");
 
     // ─── State ──────────────────────────────────────────────────────────
 
@@ -30,6 +36,9 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
     /// @notice ETH owed to beneficiaries after will execution (pull-payment)
     mapping(address => uint256) public pendingETH;
 
+    /// @notice Nonce per will owner for EIP-712 alive proofs (prevents replay)
+    mapping(address => uint256) public aliveNonce;
+
     // ─── Modifiers ──────────────────────────────────────────────────────
 
     /// @dev Reverts if the caller does not have an active will
@@ -39,6 +48,10 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
         if (!w.active) revert WillNotActive();
         _;
     }
+
+    // ─── Constructor ──────────────────────────────────────────────────────
+
+    constructor() EIP712("ChainWill", "1") {}
 
     // ─── External Functions ─────────────────────────────────────────────
 
@@ -73,6 +86,32 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
         wills[msg.sender].lastAlive = block.timestamp;
 
         emit AliveConfirmed(msg.sender, block.timestamp);
+    }
+
+    /// @inheritdoc ICryptoWill
+    function signAliveBySig(
+        address owner,
+        uint256 nonce,
+        uint256 issuedAt,
+        bytes calldata signature
+    ) external {
+        Will storage w = wills[owner];
+        if (w.owner == address(0)) revert WillNotFound();
+        if (!w.active) revert WillNotActive();
+        if (nonce != aliveNonce[owner]) revert InvalidNonce();
+        if (block.timestamp > issuedAt + 7 days) revert ProofExpired();
+
+        bytes32 structHash = keccak256(
+            abi.encode(ALIVE_TYPEHASH, owner, nonce, issuedAt)
+        );
+        bytes32 digest = _hashTypedDataV4(structHash);
+        address signer = ECDSA.recover(digest, signature);
+        if (signer != owner) revert InvalidSignature();
+
+        aliveNonce[owner] += 1;
+        w.lastAlive = block.timestamp;
+
+        emit AliveConfirmed(owner, block.timestamp);
     }
 
     /// @inheritdoc ICryptoWill
@@ -190,5 +229,10 @@ contract CryptoWill is ICryptoWill, ReentrancyGuard {
     /// @inheritdoc ICryptoWill
     function getWill(address owner) external view returns (Will memory) {
         return wills[owner];
+    }
+
+    /// @notice Returns the EIP-712 domain separator used for alive proofs
+    function DOMAIN_SEPARATOR() external view returns (bytes32) {
+        return _domainSeparatorV4();
     }
 }

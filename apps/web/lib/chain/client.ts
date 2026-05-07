@@ -1,10 +1,19 @@
-import { createPublicClient, createWalletClient, http } from "viem";
-import { baseSepolia, localhost } from "viem/chains";
+import { createPublicClient, createWalletClient, http, defineChain } from "viem";
+import { baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
+
+const anvil = defineChain({
+  id: 1337,
+  name: "Localhost",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["http://127.0.0.1:8545"] },
+  },
+});
 
 function getChain() {
   const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "84532");
-  return chainId === 31337 ? localhost : baseSepolia;
+  return chainId === 1337 ? anvil : baseSepolia;
 }
 
 export function getPublicClient() {

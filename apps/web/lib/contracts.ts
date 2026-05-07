@@ -95,6 +95,25 @@ export const CRYPTO_WILL_ABI = [
     outputs: [],
     stateMutability: "nonpayable",
   },
+  {
+    type: "function",
+    name: "signAliveBySig",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "nonce", type: "uint256" },
+      { name: "issuedAt", type: "uint256" },
+      { name: "signature", type: "bytes" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "aliveNonce",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 export const ERC20_ABI = [

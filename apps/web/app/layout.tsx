@@ -1,17 +1,32 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter_Tight, JetBrains_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { Navbar } from "@/components/layout/navbar";
-import { Footer } from "@/components/layout/footer";
 import { NetworkBanner } from "@/components/layout/network-banner";
 
-const inter = Inter({ subsets: ["latin"] });
+const interTight = Inter_Tight({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-serif",
+  weight: "400",
+  style: ["normal", "italic"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  weight: ["400", "500"],
+});
 
 export const metadata: Metadata = {
-  title: "CryptoWill — Protect Your Crypto Legacy",
+  title: "ChainWill — A quiet promise on-chain",
   description:
-    "A dead man's switch for your crypto assets. Automatically transfer tokens to your beneficiaries if you become inactive.",
+    "A non-custodial crypto will on Base. Approve your tokens, check in monthly, and know your loved ones are taken care of.",
 };
 
 export default function RootLayout({
@@ -21,14 +36,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${interTight.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} font-sans`}>
         <Providers>
-          <div className="flex min-h-screen flex-col">
-            <Navbar />
-            <NetworkBanner />
-            <div className="flex-1">{children}</div>
-            <Footer />
-          </div>
+          <NetworkBanner />
+          {children}
         </Providers>
       </body>
     </html>

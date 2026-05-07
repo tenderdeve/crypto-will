@@ -3,12 +3,16 @@
 import { useAccount } from "wagmi";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { isAddress, parseEther, formatEther } from "viem";
+import { isAddress } from "viem";
 import { WalletGuard } from "@/components/wallet/wallet-guard";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DashHeader } from "@/components/dashboard/dash-header";
+import { CheckinCard } from "@/components/dashboard/checkin-card";
+import { GraceBanner } from "@/components/dashboard/grace-banner";
+import { AssetsCard } from "@/components/dashboard/assets-card";
+import { BeneficiaryCard } from "@/components/dashboard/beneficiary-card";
+import { ETHDepositCard } from "@/components/dashboard/eth-deposit-card";
+import { ActivityList } from "@/components/dashboard/activity-list";
+import { TrustStrip } from "@/components/dashboard/trust-strip";
 import {
   useWill,
   useSignAlive,
@@ -30,41 +34,53 @@ function formatTimestamp(timestamp: bigint): string {
   });
 }
 
-function formatGracePeriod(seconds: bigint): string {
-  const days = Number(seconds) / 86400;
-  return `${days} days`;
-}
-
 export default function DashboardPage() {
   const { address } = useAccount();
   const { will, hasWill, isLoading, refetch } = useWill();
-  const { signAlive, isPending: isSigningAlive, isSuccess: aliveSuccess, hash: aliveHash } = useSignAlive();
-  const { revokeWill, isPending: isRevoking, isSuccess: revokeSuccess, error: revokeError } = useRevokeWill();
-  const { updateTokens, isPending: isUpdatingTokens, isSuccess: updateSuccess, error: updateError } = useUpdateTokens();
+  const {
+    signAlive,
+    isPending: isSigningAlive,
+    isSuccess: aliveSuccess,
+    hash: aliveHash,
+  } = useSignAlive();
+  const {
+    revokeWill,
+    isPending: isRevoking,
+    isSuccess: revokeSuccess,
+    error: revokeError,
+  } = useRevokeWill();
+  const {
+    updateTokens,
+    isPending: isUpdatingTokens,
+    isSuccess: updateSuccess,
+    error: updateError,
+  } = useUpdateTokens();
   const { balance: depositedETH, refetch: refetchETH } = useEthBalance();
-  const { depositETH, isPending: isDepositing, isSuccess: depositSuccess, error: depositError } = useDepositETH();
-  const { updateBeneficiary, isPending: isUpdatingBeneficiary, isSuccess: beneficiarySuccess, error: beneficiaryError } = useUpdateBeneficiary();
+  const {
+    depositETH,
+    isPending: isDepositing,
+    isSuccess: depositSuccess,
+    error: depositError,
+  } = useDepositETH();
+  const {
+    updateBeneficiary,
+    isPending: isUpdatingBeneficiary,
+    isSuccess: beneficiarySuccess,
+    error: beneficiaryError,
+  } = useUpdateBeneficiary();
 
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
   const revokeSynced = useRef(false);
   const beneficiarySynced = useRef(false);
-  // Latch prevents double-submit on fast double-click before isPending flips
   const revokeClicked = useRef(false);
 
   // Token management state
   const [localTokens, setLocalTokens] = useState<string[]>([]);
-  const [tokenInput, setTokenInput] = useState("");
   const [tokensDirty, setTokensDirty] = useState(false);
-
-  // ETH deposit state
-  const [ethInput, setEthInput] = useState("");
 
   // Revoke confirmation state
   const [revokeConfirm, setRevokeConfirm] = useState(false);
-
-  // Update beneficiary state
-  const [newBeneficiary, setNewBeneficiary] = useState("");
 
   // Sync local token list when will loads
   useEffect(() => {
@@ -86,15 +102,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!depositSuccess) return;
     refetchETH();
-    setEthInput("");
   }, [depositSuccess, refetchETH]);
 
-  // After updateBeneficiary confirms, refetch will + clear input
+  // After updateBeneficiary confirms, refetch will
   useEffect(() => {
     if (!beneficiarySuccess || beneficiarySynced.current) return;
     beneficiarySynced.current = true;
     refetch();
-    setNewBeneficiary("");
   }, [beneficiarySuccess, refetch]);
 
   // Close confirmation dialog and reset latch on tx failure
@@ -104,13 +118,11 @@ export default function DashboardPage() {
     revokeClicked.current = false;
   }, [revokeError]);
 
-  // After revokeWill confirms, sync DB status to "revoked"
+  // After revokeWill confirms, sync DB
   useEffect(() => {
     if (!revokeSuccess || !address || revokeSynced.current) return;
     revokeSynced.current = true;
     setRevokeConfirm(false);
-
-    // Fetch DB will id then mark revoked (best effort — on-chain is source of truth)
     fetch("/api/will", {
       headers: { "x-wallet-address": address },
     })
@@ -126,11 +138,10 @@ export default function DashboardPage() {
       .catch(() => {});
   }, [revokeSuccess, address]);
 
-  // After on-chain signAlive confirms, sync DB last_alive_at
+  // After on-chain signAlive confirms, sync DB
   useEffect(() => {
     if (!aliveSuccess || !aliveHash || !address || aliveSynced.current) return;
     aliveSynced.current = true;
-
     fetch("/api/alive", {
       method: "POST",
       headers: {
@@ -141,11 +152,14 @@ export default function DashboardPage() {
     }).catch(() => {});
   }, [aliveSuccess, aliveHash, address]);
 
-  const addLocalToken = () => {
-    const lower = tokenInput.toLowerCase();
-    if (!isAddress(tokenInput) || localTokens.some((t) => t.toLowerCase() === lower)) return;
-    setLocalTokens((prev) => [...prev, tokenInput]);
-    setTokenInput("");
+  // Token management handlers
+  const addLocalToken = (addr: string) => {
+    if (
+      !isAddress(addr) ||
+      localTokens.some((t) => t.toLowerCase() === addr.toLowerCase())
+    )
+      return;
+    setLocalTokens((prev) => [...prev, addr]);
     setTokensDirty(true);
   };
 
@@ -159,292 +173,174 @@ export default function DashboardPage() {
     updateTokens(localTokens as `0x${string}`[]);
   };
 
-  const handleDeposit = () => {
-    try {
-      const wei = parseEther(ethInput);
-      if (wei <= BigInt(0)) return;
-      depositETH(wei);
-    } catch {
-      // parseEther throws on invalid input — button disabled handles this
-    }
-  };
-
-  const ethInputValid = (() => {
-    try { return parseEther(ethInput) > BigInt(0); } catch { return false; }
-  })();
-
-  const beneficiaryInputValid =
-    isAddress(newBeneficiary) &&
-    newBeneficiary.toLowerCase() !== address?.toLowerCase() &&
-    newBeneficiary.toLowerCase() !== will?.beneficiary?.toLowerCase();
+  // Grace period calculations
+  const now = Math.floor(Date.now() / 1000);
+  const lastAlive = will ? Number(will.lastAlive) : 0;
+  const gracePeriodSec = will ? Number(will.gracePeriod) : 0;
+  const gracePeriodDays = Math.ceil(gracePeriodSec / 86400);
+  const deadline = lastAlive + gracePeriodSec;
+  const activeRemainingDays = Math.ceil((deadline - now) / 86400);
+  const inGrace = !!(hasWill && now > deadline);
 
   return (
     <WalletGuard>
-      <div className="container mx-auto max-w-3xl px-4 py-12">
-        <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-        <p className="text-muted-foreground mb-8">Manage your crypto will</p>
+      <div className="min-h-screen bg-bg">
+        <DashHeader />
+        {inGrace && (
+          <GraceBanner
+            remainingDays={Math.max(0, activeRemainingDays)}
+            onCheckin={signAlive}
+          />
+        )}
 
         {isLoading && (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Loading your will...</p>
-            </CardContent>
-          </Card>
+          <div className="max-w-[1240px] mx-auto px-6 py-20 text-center md:px-12">
+            <p className="text-ink-3">Loading your will...</p>
+          </div>
         )}
 
         {!isLoading && !hasWill && (
-          <Card>
-            <CardContent className="py-12 text-center space-y-4">
-              <h2 className="text-xl font-semibold">No Will Found</h2>
-              <p className="text-muted-foreground">
-                You haven&apos;t created a will yet. Protect your crypto legacy now.
-              </p>
-              <Link href="/create">
-                <Button size="lg">Create Your Will</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <div className="max-w-[1240px] mx-auto px-6 py-20 text-center md:px-12">
+            <h2 className="serif text-4xl mb-4">No will found.</h2>
+            <p className="text-ink-2 mb-8">
+              You haven&apos;t created a will yet. Protect your crypto legacy
+              now.
+            </p>
+            <Link
+              href="/create"
+              className="inline-flex items-center gap-2 rounded-pill bg-ink text-paper px-6 py-3 text-[15px] font-medium no-underline"
+            >
+              Create Your Will
+            </Link>
+          </div>
         )}
 
         {!isLoading && hasWill && will && (
-          <div className="space-y-6">
-            {/* Status Card */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Your Will</CardTitle>
-                  <Badge variant={will.active ? "default" : "secondary"}>
-                    {will.active ? "Active" : "Inactive"}
-                  </Badge>
+          <div className="max-w-[1240px] mx-auto px-6 py-12 md:px-12">
+            {/* Title row */}
+            <div className="grid grid-cols-1 gap-8 items-end mb-10 lg:grid-cols-[1.4fr_0.9fr] lg:gap-12">
+              <div>
+                <div className="text-xs tracking-[0.14em] uppercase text-ink-3 mb-3">
+                  Your will ·{" "}
+                  {inGrace ? "In grace period" : "Active on Base"}
                 </div>
-                <CardDescription>
-                  Connected as {address?.slice(0, 6)}...{address?.slice(-4)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground">Beneficiary</p>
-                    <code className="text-sm">
-                      {will.beneficiary.slice(0, 6)}...{will.beneficiary.slice(-4)}
-                    </code>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground">Grace Period</p>
-                    <p className="font-medium">{formatGracePeriod(will.gracePeriod)}</p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground">Last Alive</p>
-                    <p className="font-medium">{formatTimestamp(will.lastAlive)}</p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-sm text-muted-foreground">Tokens Included</p>
-                    <p className="font-medium">{will.tokens.length} token(s)</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                <h1 className="serif text-5xl leading-none m-0 tracking-[-0.02em] lg:text-[64px]">
+                  {inGrace ? (
+                    <>
+                      We haven&apos;t heard from you
+                      <br />
+                      <em className="text-accent">in a little while.</em>
+                    </>
+                  ) : (
+                    <>
+                      Everything&apos;s
+                      <br />
+                      <em className="text-accent">in order.</em>
+                    </>
+                  )}
+                </h1>
+              </div>
+              <div className="text-[15px] leading-relaxed text-ink-2 max-w-[380px]">
+                {inGrace
+                  ? "Sign the message below — your timer resets to zero. No funds will move during this grace period."
+                  : `Your check-in resets the timer. After ${gracePeriodDays} days of silence, anyone can call executeWill().`}
+              </div>
+            </div>
 
-            {/* Update Beneficiary */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Update Beneficiary</CardTitle>
-                <CardDescription>
-                  Change who receives your assets. Current:{" "}
-                  <code className="text-xs">{will.beneficiary}</code>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="New beneficiary address (0x...)"
-                    value={newBeneficiary}
-                    onChange={(e) => setNewBeneficiary(e.target.value)}
-                  />
-                  <Button
-                    onClick={() => updateBeneficiary(newBeneficiary as `0x${string}`)}
-                    disabled={!beneficiaryInputValid || isUpdatingBeneficiary}
-                  >
-                    {isUpdatingBeneficiary ? "Updating..." : "Update"}
-                  </Button>
-                </div>
-                {newBeneficiary && !isAddress(newBeneficiary) && (
-                  <p className="text-xs text-destructive">Invalid address</p>
-                )}
-                {newBeneficiary && isAddress(newBeneficiary) && newBeneficiary.toLowerCase() === address?.toLowerCase() && (
-                  <p className="text-xs text-destructive">Cannot be your own address</p>
-                )}
-                {newBeneficiary && isAddress(newBeneficiary) && newBeneficiary.toLowerCase() === will.beneficiary?.toLowerCase() && (
-                  <p className="text-xs text-muted-foreground">Same as current beneficiary</p>
-                )}
-                {beneficiaryError && (
-                  <p className="text-sm text-destructive">{beneficiaryError.message.slice(0, 120)}</p>
-                )}
-                {beneficiarySuccess && (
-                  <p className="text-sm text-green-600 dark:text-green-400">Beneficiary updated on-chain.</p>
-                )}
-              </CardContent>
-            </Card>
+            {/* Checkin card */}
+            <CheckinCard
+              grace={inGrace}
+              gracePeriod={gracePeriodDays}
+              activeRemaining={activeRemainingDays}
+              email={undefined}
+              onCheckin={signAlive}
+              isPending={isSigningAlive}
+              isSuccess={aliveSuccess}
+            />
 
-            {/* Token Management */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Token List</CardTitle>
-                <CardDescription>
-                  Add or remove ERC-20 tokens. New tokens must be approved via the token
-                  contract before they can be transferred.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {localTokens.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No tokens in will.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {localTokens.map((t, i) => (
-                      <div key={t} className="flex items-center justify-between gap-2 rounded-lg border p-3">
-                        <code className="text-xs truncate flex-1">{t}</code>
-                        <Button size="sm" variant="ghost" onClick={() => removeLocalToken(i)} disabled={isUpdatingTokens}>
-                          ✕
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Token contract address (0x...)"
-                    value={tokenInput}
-                    onChange={(e) => setTokenInput(e.target.value)}
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={addLocalToken}
-                    disabled={!isAddress(tokenInput) || localTokens.some((t) => t.toLowerCase() === tokenInput.toLowerCase())}
-                  >
-                    + Add
-                  </Button>
-                </div>
-                {localTokens.length === 0 && tokensDirty && (
-                  <p className="text-xs text-destructive">Will must have at least one token.</p>
-                )}
-                {updateError && (
-                  <p className="text-sm text-destructive">{updateError.message.slice(0, 120)}</p>
-                )}
-                {updateSuccess && (
-                  <p className="text-sm text-green-600 dark:text-green-400">Token list updated on-chain.</p>
-                )}
-                <Button
-                  className="w-full"
-                  onClick={handleSaveTokens}
-                  disabled={!tokensDirty || localTokens.length === 0 || isUpdatingTokens}
-                >
-                  {isUpdatingTokens ? "Saving..." : "Save Token Changes"}
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Assets + Beneficiary */}
+            <div className="grid grid-cols-1 gap-6 mt-6 lg:grid-cols-[1.4fr_0.9fr]">
+              <AssetsCard
+                tokens={will.tokens}
+                localTokens={localTokens}
+                onAddToken={addLocalToken}
+                onRemoveToken={removeLocalToken}
+                onSaveTokens={handleSaveTokens}
+                tokensDirty={tokensDirty}
+                isUpdating={isUpdatingTokens}
+                updateSuccess={updateSuccess}
+              />
+              <BeneficiaryCard
+                beneficiary={will.beneficiary}
+                ownerAddress={address || ""}
+                onUpdate={updateBeneficiary}
+                isPending={isUpdatingBeneficiary}
+                isSuccess={beneficiarySuccess}
+                error={beneficiaryError}
+              />
+            </div>
 
             {/* ETH Deposit */}
-            <Card>
-              <CardHeader>
-                <CardTitle>ETH Deposit</CardTitle>
-                <CardDescription>
-                  Only ETH deposited here is covered by your will. Wallet ETH balance is not
-                  automatically included.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border p-4">
-                  <p className="text-sm text-muted-foreground">Deposited in Contract</p>
-                  <p className="text-xl font-semibold">{formatEther(depositedETH)} ETH</p>
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.001"
-                    placeholder="Amount in ETH (e.g. 0.5)"
-                    value={ethInput}
-                    onChange={(e) => setEthInput(e.target.value)}
-                  />
-                  <Button onClick={handleDeposit} disabled={!ethInputValid || isDepositing}>
-                    {isDepositing ? "Depositing..." : "Deposit"}
-                  </Button>
-                </div>
-                {depositError && (
-                  <p className="text-sm text-destructive">{depositError.message.slice(0, 120)}</p>
-                )}
-                {depositSuccess && (
-                  <p className="text-sm text-green-600 dark:text-green-400">ETH deposited. Balance updated.</p>
-                )}
-              </CardContent>
-            </Card>
+            <ETHDepositCard
+              depositedETH={depositedETH}
+              onDeposit={depositETH}
+              isPending={isDepositing}
+              isSuccess={depositSuccess}
+              error={depositError}
+            />
 
-            {/* Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Button
-                  onClick={signAlive}
-                  disabled={isSigningAlive}
-                  className="w-full"
+            {/* Activity */}
+            <ActivityList grace={inGrace} />
+
+            {/* Revoke */}
+            <div className="mt-8">
+              {!revokeConfirm ? (
+                <button
+                  onClick={() => setRevokeConfirm(true)}
+                  disabled={revokeSuccess}
+                  className="rounded-pill border border-danger text-danger bg-transparent px-5 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-50"
                 >
-                  {isSigningAlive ? "Signing..." : aliveSuccess ? "Confirmed! ✓" : "Sign Alive"}
-                </Button>
-                {aliveSuccess && (
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    Alive check confirmed on-chain. Timer reset.
+                  {revokeSuccess ? "Revoked ✓" : "Revoke Will"}
+                </button>
+              ) : (
+                <div className="rounded-cards border border-danger p-6 max-w-[600px] space-y-3">
+                  <p className="text-sm font-medium text-danger">
+                    Revoking your will is permanent. Any deposited ETH will be
+                    refunded. Your token approvals remain — revoke them manually
+                    if needed.
                   </p>
-                )}
-
-                {/* Revoke with confirmation */}
-                {!revokeConfirm ? (
-                  <Button
-                    variant="destructive"
-                    onClick={() => setRevokeConfirm(true)}
-                    className="w-full"
-                    disabled={revokeSuccess}
-                  >
-                    {revokeSuccess ? "Revoked ✓" : "Revoke Will"}
-                  </Button>
-                ) : (
-                  <div className="rounded-lg border border-destructive p-4 space-y-3">
-                    <p className="text-sm font-medium text-destructive">
-                      Revoking your will is permanent. Any deposited ETH will be refunded.
-                      Your token approvals remain — revoke them manually if needed.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setRevokeConfirm(false)}
-                        className="flex-1"
-                        disabled={isRevoking}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => {
-                          if (revokeClicked.current) return;
-                          revokeClicked.current = true;
-                          revokeWill();
-                        }}
-                        className="flex-1"
-                        disabled={isRevoking}
-                      >
-                        {isRevoking ? "Revoking..." : "Yes, Revoke"}
-                      </Button>
-                    </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setRevokeConfirm(false)}
+                      disabled={isRevoking}
+                      className="flex-1 rounded-pill border border-line bg-transparent text-ink px-4 py-2.5 text-sm cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (revokeClicked.current) return;
+                        revokeClicked.current = true;
+                        revokeWill();
+                      }}
+                      disabled={isRevoking}
+                      className="flex-1 rounded-pill bg-danger text-white border-none px-4 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-50"
+                    >
+                      {isRevoking ? "Revoking..." : "Yes, Revoke"}
+                    </button>
                   </div>
-                )}
-                {revokeSuccess && (
-                  <p className="text-sm text-orange-600 dark:text-orange-400">
-                    Will revoked. Deposited ETH refunded. Reload to see updated state.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              )}
+              {revokeSuccess && (
+                <p className="text-sm text-warn mt-3">
+                  Will revoked. Deposited ETH refunded. Reload to see updated
+                  state.
+                </p>
+              )}
+            </div>
+
+            {/* Trust strip */}
+            <TrustStrip />
           </div>
         )}
       </div>
