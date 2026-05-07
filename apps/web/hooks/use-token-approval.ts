@@ -12,16 +12,19 @@ export function useTokenApproval(tokenAddress: `0x${string}`) {
     abi: ERC20_ABI,
     functionName: "allowance",
     args: address ? [address, CRYPTO_WILL_ADDRESS] : undefined,
-    query: { enabled: !!address && !!tokenAddress },
+    query: {
+      enabled: !!address && !!tokenAddress,
+      refetchInterval: 2000,
+    },
   });
 
-  const { writeContract, data: hash, isPending } = useWriteContract();
+  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
   });
 
-  const isApproved = allowance ? allowance > BigInt(0) : false;
+  const isApproved = allowance !== undefined && allowance > BigInt(0);
 
   const approve = () => {
     writeContract({
@@ -37,6 +40,7 @@ export function useTokenApproval(tokenAddress: `0x${string}`) {
     approve,
     isPending: isPending || isConfirming,
     isSuccess,
+    error: writeError,
     hash,
   };
 }

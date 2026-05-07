@@ -3,17 +3,21 @@
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { type ReactNode } from "react";
+import { Brand } from "@/components/landing/brand";
 
 export function WalletGuard({ children }: { children: ReactNode }) {
   const { isConnected } = useAccount();
 
   if (!isConnected) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4">
-        <h2 className="text-2xl font-bold">Connect Your Wallet</h2>
-        <p className="text-muted-foreground text-center max-w-md">
-          You need to connect your wallet to access this page.
-        </p>
+      <div className="min-h-screen bg-bg flex flex-col items-center justify-center gap-8 px-6">
+        <Brand size={28} />
+        <div className="text-center space-y-3 max-w-md">
+          <h2 className="serif text-3xl">Connect your wallet</h2>
+          <p className="text-ink-2 text-[15px] leading-relaxed">
+            You need to connect your wallet to access this page.
+          </p>
+        </div>
         <ConnectButton />
       </div>
     );

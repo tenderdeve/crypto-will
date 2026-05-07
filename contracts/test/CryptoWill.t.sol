@@ -718,6 +718,165 @@ contract CryptoWillTest is Test {
         assertEq(w.tokens.length, 50);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  signAliveBySig (EIP-712 gasless check-in)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function _signAliveProof(uint256 privateKey, address willOwner, uint256 nonce, uint256 issuedAt)
+        internal
+        view
+        returns (bytes memory)
+    {
+        bytes32 ALIVE_TH = keccak256("AliveProof(address owner,uint256 nonce,uint256 issuedAt)");
+        bytes32 structHash = keccak256(abi.encode(ALIVE_TH, willOwner, nonce, issuedAt));
+        bytes32 domainSeparator = cryptoWill.DOMAIN_SEPARATOR();
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function test_signAliveBySig_success() public {
+        // Use vm.createWallet for a real private key
+        (address signer, uint256 signerPk) = makeAddrAndKey("eip712owner");
+
+        // Setup: create will for signer
+        token1.mint(signer, 100 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(signer);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        // Advance time
+        vm.warp(block.timestamp + 30 days);
+        uint256 issuedAt = block.timestamp;
+
+        bytes memory sig = _signAliveProof(signerPk, signer, 0, issuedAt);
+
+        // Anyone (relayer) submits the proof
+        vm.prank(executor);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig);
+
+        ICryptoWill.Will memory w = cryptoWill.getWill(signer);
+        assertEq(w.lastAlive, block.timestamp);
+        assertEq(cryptoWill.aliveNonce(signer), 1);
+    }
+
+    function test_signAliveBySig_invalidNonce() public {
+        (address signer, uint256 signerPk) = makeAddrAndKey("eip712owner2");
+        token1.mint(signer, 100 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(signer);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        uint256 issuedAt = block.timestamp;
+        bytes memory sig = _signAliveProof(signerPk, signer, 999, issuedAt);
+
+        vm.prank(executor);
+        vm.expectRevert(ICryptoWill.InvalidNonce.selector);
+        cryptoWill.signAliveBySig(signer, 999, issuedAt, sig);
+    }
+
+    function test_signAliveBySig_expiredProof() public {
+        (address signer, uint256 signerPk) = makeAddrAndKey("eip712owner3");
+        token1.mint(signer, 100 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(signer);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        uint256 issuedAt = block.timestamp;
+        bytes memory sig = _signAliveProof(signerPk, signer, 0, issuedAt);
+
+        // Advance past 7 days
+        vm.warp(issuedAt + 7 days + 1);
+
+        vm.prank(executor);
+        vm.expectRevert(ICryptoWill.ProofExpired.selector);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig);
+    }
+
+    function test_signAliveBySig_invalidSig() public {
+        (address signer, ) = makeAddrAndKey("eip712owner4");
+        (, uint256 wrongPk) = makeAddrAndKey("wrongSigner");
+
+        token1.mint(signer, 100 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(signer);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        uint256 issuedAt = block.timestamp;
+        bytes memory sig = _signAliveProof(wrongPk, signer, 0, issuedAt);
+
+        vm.prank(executor);
+        vm.expectRevert(ICryptoWill.InvalidSignature.selector);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig);
+    }
+
+    function test_signAliveBySig_noWill() public {
+        (address signer, uint256 signerPk) = makeAddrAndKey("eip712owner5");
+        uint256 issuedAt = block.timestamp;
+        bytes memory sig = _signAliveProof(signerPk, signer, 0, issuedAt);
+
+        vm.prank(executor);
+        vm.expectRevert(ICryptoWill.WillNotFound.selector);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig);
+    }
+
+    function test_signAliveBySig_incrementsNonce() public {
+        (address signer, uint256 signerPk) = makeAddrAndKey("eip712owner6");
+        token1.mint(signer, 100 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(signer);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        // First proof (nonce 0)
+        uint256 issuedAt = block.timestamp;
+        bytes memory sig0 = _signAliveProof(signerPk, signer, 0, issuedAt);
+        vm.prank(executor);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig0);
+        assertEq(cryptoWill.aliveNonce(signer), 1);
+
+        // Second proof (nonce 1)
+        vm.warp(block.timestamp + 1);
+        uint256 issuedAt2 = block.timestamp;
+        bytes memory sig1 = _signAliveProof(signerPk, signer, 1, issuedAt2);
+        vm.prank(executor);
+        cryptoWill.signAliveBySig(signer, 1, issuedAt2, sig1);
+        assertEq(cryptoWill.aliveNonce(signer), 2);
+
+        // Replaying nonce 0 should fail
+        vm.prank(executor);
+        vm.expectRevert(ICryptoWill.InvalidNonce.selector);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig0);
+    }
+
+    function test_signAliveBySig_anyoneCanSubmit() public {
+        (address signer, uint256 signerPk) = makeAddrAndKey("eip712owner7");
+        token1.mint(signer, 100 ether);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token1);
+        vm.prank(signer);
+        cryptoWill.createWill(beneficiary, tokens, GRACE_PERIOD);
+
+        uint256 issuedAt = block.timestamp;
+        bytes memory sig = _signAliveProof(signerPk, signer, 0, issuedAt);
+
+        // Random address submits — should work
+        address relayer = makeAddr("relayer");
+        vm.prank(relayer);
+        cryptoWill.signAliveBySig(signer, 0, issuedAt, sig);
+
+        ICryptoWill.Will memory w = cryptoWill.getWill(signer);
+        assertEq(w.lastAlive, block.timestamp);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  getWill
+    // ═══════════════════════════════════════════════════════════════════════
+
     function test_getWill_returnsCorrectData() public {
         _createDefaultWill();
 

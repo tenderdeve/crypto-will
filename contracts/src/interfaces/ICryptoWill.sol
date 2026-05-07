@@ -29,6 +29,9 @@ interface ICryptoWill {
     error TooManyTokens();
     error ZeroETHDeposit();
     error NoETHPending();
+    error InvalidNonce();
+    error ProofExpired();
+    error InvalidSignature();
 
     // ─── Events ─────────────────────────────────────────────────────────
 
@@ -78,6 +81,13 @@ interface ICryptoWill {
 
     /// @notice Claim ETH owed to the caller from an executed will (pull-payment)
     function claimETH() external;
+
+    /// @notice Confirm alive via EIP-712 signature (gasless for will owner)
+    /// @param owner The will owner who signed the proof
+    /// @param nonce Must match current aliveNonce for the owner
+    /// @param issuedAt Timestamp when the proof was created (must be < 7 days old)
+    /// @param signature EIP-712 signature from the owner
+    function signAliveBySig(address owner, uint256 nonce, uint256 issuedAt, bytes calldata signature) external;
 
     /// @notice Get the will details for an owner
     /// @param owner Address of the will owner

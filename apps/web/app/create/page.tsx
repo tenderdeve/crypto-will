@@ -5,22 +5,30 @@ import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { isAddress } from "viem";
 import { WalletGuard } from "@/components/wallet/wallet-guard";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Brand } from "@/components/landing/brand";
 import { useTokenApproval } from "@/hooks/use-token-approval";
 import { useCreateWill } from "@/hooks/use-create-will";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
+import { useWill } from "@/hooks/use-will";
+import { Shield, Mail, Check, ArrowRight, Info } from "lucide-react";
 
-const GRACE_PERIOD_OPTIONS = [
-  { label: "30 days", value: 30 },
-  { label: "60 days", value: 60 },
-  { label: "90 days", value: 90 },
-  { label: "120 days", value: 120 },
-  { label: "180 days", value: 180 },
+// ─── Constants ──────────────────────────────────────────────────────
+
+const STEPS = [
+  { id: "details", n: "01", t: "Details" },
+  { id: "tokens", n: "02", t: "Tokens & approvals" },
+  { id: "review", n: "03", t: "Review & create" },
 ];
+
+const GRACE_OPTIONS = [
+  { value: 30, label: "30 days", hint: "Aggressive — for active users" },
+  { value: 60, label: "60 days", hint: "" },
+  { value: 90, label: "90 days", hint: "Recommended" },
+  { value: 120, label: "120 days", hint: "" },
+  { value: 180, label: "180 days", hint: "For long-term holders" },
+];
+
+// ─── Token Approval Row ─────────────────────────────────────────────
 
 function TokenApprovalRow({
   tokenAddress,
@@ -37,50 +45,93 @@ function TokenApprovalRow({
   onRemove: () => void;
   onApprovalChange: (addr: string, approved: boolean) => void;
 }) {
-  const { isApproved, approve, isPending } = useTokenApproval(tokenAddress);
+  const { isApproved, approve, isPending, error } = useTokenApproval(tokenAddress);
 
   useEffect(() => {
     onApprovalChange(tokenAddress, isApproved);
   }, [tokenAddress, isApproved, onApprovalChange]);
 
   return (
-    <div className="rounded-lg border p-3 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{symbol || "Unknown"}</span>
-            {balance && (
-              <span className="text-sm text-muted-foreground">
-                ({Number(balance).toLocaleString(undefined, { maximumFractionDigits: 4 })})
-              </span>
-            )}
+    <div className="px-5 py-4 border-b border-line-2" style={{ background: isApproved ? "rgba(185,79,43,0.04)" : "transparent" }}>
+      <div
+        className="grid items-center gap-4"
+        style={{ gridTemplateColumns: "1fr 130px 130px" }}
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="w-9 h-9 rounded-[10px] bg-ink/10 flex items-center justify-center text-xs font-bold">
+            {(symbol || "?")[0]}
           </div>
-          <code className="text-xs text-muted-foreground truncate block">{tokenAddress}</code>
+          <div>
+            <div className="text-[15px] font-medium">
+              {symbol || "Unknown"}{" "}
+              {zeroBalanceWarning && (
+                <span className="text-warn text-xs font-normal">· no balance</span>
+              )}
+            </div>
+            <div className="mono text-[11px] text-ink-3 mt-0.5">
+              {tokenAddress.slice(0, 8)}…{tokenAddress.slice(-6)}
+            </div>
+          </div>
         </div>
-        {isApproved ? (
-          <Badge variant="default">Approved</Badge>
-        ) : (
-          <Button size="sm" onClick={approve} disabled={isPending}>
-            {isPending ? "Approving..." : "Approve"}
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" onClick={onRemove}>
-          ✕
-        </Button>
+        <div>
+          {balance && (
+            <>
+              <div className="mono text-sm">
+                {Number(balance).toLocaleString(undefined, {
+                  maximumFractionDigits: 4,
+                })}
+              </div>
+              {zeroBalanceWarning && (
+                <div className="text-xs text-warn">no balance</div>
+              )}
+            </>
+          )}
+        </div>
+        <div className="text-right flex items-center justify-end gap-2">
+          {isApproved ? (
+            <span className="text-xs text-good inline-flex items-center gap-1.5">
+              <Check className="w-3.5 h-3.5" /> Approved
+            </span>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); approve(); }}
+              disabled={isPending}
+              className="rounded-pill bg-ink text-paper px-3.5 py-2 text-[13px] font-medium cursor-pointer border-none disabled:opacity-50"
+            >
+              {isPending ? "Confirm…" : "Approve"}
+            </button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="bg-transparent border-none text-ink-3 cursor-pointer text-sm hover:text-ink"
+          >
+            ×
+          </button>
+        </div>
       </div>
-      {zeroBalanceWarning && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">
-          No balance detected. Token is included but won&apos;t transfer if empty at execution.
-        </p>
+      {error && (
+        <div className="text-xs text-danger mt-2">
+          Error: {error.message.slice(0, 200)}
+        </div>
       )}
     </div>
   );
 }
 
+// ─── Main Page ──────────────────────────────────────────────────────
+
 export default function CreateWillPage() {
   const router = useRouter();
   const { address } = useAccount();
-  const [step, setStep] = useState(1);
+  const { hasWill, isLoading: willLoading } = useWill();
+  const [step, setStep] = useState(0);
+
+  // Redirect to dashboard if wallet already has a will
+  useEffect(() => {
+    if (!willLoading && hasWill) {
+      router.replace("/dashboard");
+    }
+  }, [willLoading, hasWill, router]);
 
   // Step 1 state
   const [beneficiary, setBeneficiary] = useState("");
@@ -90,28 +141,35 @@ export default function CreateWillPage() {
   // Step 2 state
   const [tokenInput, setTokenInput] = useState("");
   const [tokens, setTokens] = useState<`0x${string}`[]>([]);
-  const [tokenMeta, setTokenMeta] = useState<Record<string, { symbol: string; balance: string }>>({});
-  const [zeroBalanceTokens, setZeroBalanceTokens] = useState<Set<string>>(new Set());
+  const [tokenMeta, setTokenMeta] = useState<
+    Record<string, { symbol: string; balance: string }>
+  >({});
+  const [zeroBalanceTokens, setZeroBalanceTokens] = useState<Set<string>>(
+    new Set()
+  );
   const [approvedSet, setApprovedSet] = useState<Set<string>>(new Set());
-  const { tokens: detectedTokens, isLoading: tokensLoading } = useWalletTokens();
+  const { tokens: detectedTokens, isLoading: tokensLoading } =
+    useWalletTokens();
+  const allApproved =
+    tokens.length > 0 && tokens.every((t) => approvedSet.has(t));
 
-  const allApproved = tokens.length > 0 && tokens.every((t) => approvedSet.has(t));
-
-  const handleApprovalChange = useCallback((addr: string, approved: boolean) => {
-    setApprovedSet((prev) => {
-      const next = new Set(prev);
-      if (approved) next.add(addr);
-      else next.delete(addr);
-      return next;
-    });
-  }, []);
+  const handleApprovalChange = useCallback(
+    (addr: string, approved: boolean) => {
+      setApprovedSet((prev) => {
+        const next = new Set(prev);
+        if (approved) next.add(addr);
+        else next.delete(addr);
+        return next;
+      });
+    },
+    []
+  );
 
   // Step 3
   const { createWill, isPending, isSuccess, hash, error } = useCreateWill();
   const [dbSaving, setDbSaving] = useState(false);
   const dbSaveAttempted = useRef(false);
 
-  // After on-chain tx confirms, save will metadata to DB then redirect
   useEffect(() => {
     if (!isSuccess || !hash || !address || dbSaveAttempted.current) return;
     dbSaveAttempted.current = true;
@@ -138,21 +196,24 @@ export default function CreateWillPage() {
       });
   }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, router]);
 
-  const addToken = (addr?: `0x${string}`, meta?: { symbol: string; balance: string }) => {
+  const addToken = (
+    addr?: `0x${string}`,
+    meta?: { symbol: string; balance: string }
+  ) => {
     const tokenAddr = addr || (tokenInput as `0x${string}`);
     if (!isAddress(tokenAddr) || tokens.includes(tokenAddr)) return;
-
     setTokens((prev) => [...prev, tokenAddr]);
-
     if (meta) {
       setTokenMeta((prev) => ({ ...prev, [tokenAddr]: meta }));
     } else {
-      // Manual add — check if wallet has balance for this token
       const detected = detectedTokens.find(
         (t) => t.address.toLowerCase() === tokenAddr.toLowerCase()
       );
       if (detected) {
-        setTokenMeta((prev) => ({ ...prev, [tokenAddr]: { symbol: detected.symbol, balance: detected.balance } }));
+        setTokenMeta((prev) => ({
+          ...prev,
+          [tokenAddr]: { symbol: detected.symbol, balance: detected.balance },
+        }));
       } else {
         setZeroBalanceTokens((prev) => new Set(prev).add(tokenAddr));
       }
@@ -180,279 +241,569 @@ export default function CreateWillPage() {
     createWill(beneficiary as `0x${string}`, tokens, gracePeriodSeconds);
   };
 
+  // Validation
+  const validAddr =
+    isAddress(beneficiary) &&
+    beneficiary.toLowerCase() !== address?.toLowerCase();
+  const validEmail = /\S+@\S+\.\S+/.test(email);
+  const step1Ok = validAddr && validEmail;
+
+  const short = (a: string) =>
+    a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
+
   return (
     <WalletGuard>
-      <div className="container mx-auto max-w-2xl px-4 py-12">
-        <h1 className="text-3xl font-bold mb-2">Create Your Will</h1>
-        <p className="text-muted-foreground mb-8">Step {step} of 3</p>
+      <div
+        className="min-h-screen grid bg-bg"
+        style={{ gridTemplateColumns: "320px 1fr" }}
+      >
+        {/* ─── Left Rail Stepper ─── */}
+        <aside className="border-r border-line-2 px-7 py-8 bg-bg-2 sticky top-0 h-screen flex flex-col">
+          <div className="mb-14">
+            <Brand size={20} />
+          </div>
+          <div className="text-[11px] tracking-[0.14em] uppercase text-ink-3 mb-4">
+            Create your will
+          </div>
+          <ol className="list-none m-0 p-0 grid gap-1">
+            {STEPS.map((s, i) => {
+              const done = i < step;
+              const active = i === step;
+              return (
+                <li key={s.id}>
+                  <button
+                    onClick={() => i <= step && setStep(i)}
+                    disabled={i > step}
+                    className={`w-full flex items-center gap-3.5 px-3 py-3 rounded-[10px] text-left border cursor-pointer disabled:cursor-default ${
+                      active
+                        ? "bg-paper border-line"
+                        : "bg-transparent border-transparent"
+                    }`}
+                  >
+                    <span
+                      className={`w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] mono font-medium border ${
+                        done
+                          ? "bg-accent border-accent text-accent-ink"
+                          : active
+                          ? "bg-transparent border-ink text-ink"
+                          : "bg-transparent border-line text-ink-3"
+                      }`}
+                    >
+                      {done ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        s.n
+                      )}
+                    </span>
+                    <span
+                      className={`text-sm ${
+                        active || done
+                          ? "text-ink font-medium"
+                          : "text-ink-3"
+                      }`}
+                    >
+                      {s.t}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="mt-auto pt-6 border-t border-line text-xs text-ink-3 leading-relaxed">
+            <div className="flex items-center gap-2 text-ink-2 font-medium mb-1.5">
+              <Shield className="w-4 h-4" /> You&apos;re in control
+            </div>
+            One on-chain tx at the end. You can quit any time.
+          </div>
+        </aside>
 
-        {/* Progress bar */}
-        <div className="flex gap-2 mb-8">
-          {[1, 2, 3].map((s) => (
-            <div
-              key={s}
-              className={`h-2 flex-1 rounded-full ${s <= step ? "bg-primary" : "bg-muted"}`}
-            />
-          ))}
-        </div>
-
-        {/* Step 1: Details */}
-        {step === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Beneficiary Details</CardTitle>
-              <CardDescription>
-                Enter who should receive your tokens and how long to wait.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="beneficiary">Beneficiary Wallet Address</Label>
-                <Input
-                  id="beneficiary"
-                  placeholder="0x..."
-                  value={beneficiary}
-                  onChange={(e) => setBeneficiary(e.target.value)}
-                />
-                {beneficiary && !isAddress(beneficiary) && (
-                  <p className="text-sm text-destructive">Invalid address</p>
-                )}
-                {beneficiary && beneficiary.toLowerCase() === address?.toLowerCase() && (
-                  <p className="text-sm text-destructive">Cannot be your own address</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Your Email (for alive check reminders)</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="grace">Grace Period</Label>
-                <select
-                  id="grace"
-                  value={gracePeriod}
-                  onChange={(e) => setGracePeriod(Number(e.target.value))}
-                  className="w-full rounded-md border bg-background px-3 py-2"
-                >
-                  {GRACE_PERIOD_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-muted-foreground">
-                  Your will executes if you miss {Math.floor(gracePeriod / 30)} monthly check-ins.
-                </p>
-              </div>
-
-              <div className="rounded-md bg-muted/50 border p-3 space-y-1">
-                <p className="text-xs font-medium">About ETH coverage</p>
-                <p className="text-xs text-muted-foreground">
-                  Your wallet&apos;s ETH balance is <strong>not</strong> automatically included in your will.
-                  Only ETH you manually deposit into the contract (from your dashboard after creation) is covered.
-                  ERC-20 tokens you select and approve in the next step are included automatically at execution time.
-                </p>
-              </div>
-
-              <Button
-                className="w-full"
-                onClick={() => setStep(2)}
-                disabled={
-                  !isAddress(beneficiary) ||
-                  beneficiary.toLowerCase() === address?.toLowerCase() ||
-                  !email
-                }
-              >
-                Next: Select Tokens
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 2: Token Approval */}
-        {step === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Select & Approve Tokens</CardTitle>
-              <CardDescription>
-                Add tokens and approve each one. All must be approved before proceeding.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {tokensLoading && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Detecting tokens in your wallet...
-                </p>
-              )}
-
-              {!tokensLoading && detectedTokens.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Your Tokens</Label>
-                  {detectedTokens
-                    .filter((t) => !tokens.includes(t.address))
-                    .map((t) => (
-                      <div
-                        key={t.address}
-                        className="flex items-center justify-between gap-2 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => addToken(t.address, { symbol: t.symbol, balance: t.balance })}
-                      >
-                        <div>
-                          <span className="font-medium">{t.symbol}</span>
-                          <span className="text-sm text-muted-foreground ml-2">
-                            {Number(t.balance).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                          </span>
-                        </div>
-                        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); addToken(t.address, { symbol: t.symbol, balance: t.balance }); }}>
-                          + Add
-                        </Button>
-                      </div>
-                    ))}
-                </div>
-              )}
-
-              {tokens.length > 0 && (
-                <div className="space-y-2">
-                  <Label>
-                    Selected — Approve Each Token
-                    {tokens.length > 0 && (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        ({Math.min(approvedSet.size, tokens.length)}/{tokens.length} approved)
-                      </span>
-                    )}
-                  </Label>
-                  {tokens.map((token, i) => (
-                    <TokenApprovalRow
-                      key={token}
-                      tokenAddress={token}
-                      symbol={tokenMeta[token]?.symbol}
-                      balance={tokenMeta[token]?.balance}
-                      zeroBalanceWarning={zeroBalanceTokens.has(token)}
-                      onRemove={() => removeToken(i)}
-                      onApprovalChange={handleApprovalChange}
+        {/* ─── Main Content ─── */}
+        <main className="px-12 py-14 max-w-[980px] w-full lg:px-20">
+          {/* Step 1: Details */}
+          {step === 0 && (
+            <div>
+              <StepHeader
+                kicker="Step 01"
+                title="Who, where, and how long."
+                sub="Pick a beneficiary, give us an email for monthly reminders, and set the grace period before your will can execute."
+              />
+              <div className="grid grid-cols-1 gap-8 items-start lg:grid-cols-[1fr_340px]">
+                <div className="grid gap-5 max-w-[620px]">
+                  <FieldBox
+                    label="Beneficiary wallet address"
+                    hint="0x… or ENS · single recipient"
+                  >
+                    <input
+                      value={beneficiary}
+                      onChange={(e) => setBeneficiary(e.target.value)}
+                      placeholder="0x7B0e…41a8 or alex.eth"
+                      className="border-none outline-none bg-transparent w-full font-inherit text-[15px]"
                     />
-                  ))}
-                </div>
-              )}
-
-              <div className="border-t pt-4">
-                <Label className="text-sm text-muted-foreground">Add token manually</Label>
-                <div className="flex gap-2 mt-2">
-                  <Input
-                    placeholder="Token contract address (0x...)"
-                    value={tokenInput}
-                    onChange={(e) => setTokenInput(e.target.value)}
-                  />
-                  <Button onClick={() => addToken()} disabled={!isAddress(tokenInput)}>
-                    Add
-                  </Button>
-                </div>
-              </div>
-
-              {tokens.length === 0 && !tokensLoading && detectedTokens.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No tokens detected. Add token addresses manually above.
-                </p>
-              )}
-
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(1)}>
-                  Back
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => setStep(3)}
-                  disabled={tokens.length === 0 || !allApproved}
-                  title={!allApproved ? "Approve all tokens before proceeding" : undefined}
-                >
-                  {!allApproved && tokens.length > 0
-                    ? `Approve all tokens (${Math.min(approvedSet.size, tokens.length)}/${tokens.length})`
-                    : "Next: Review & Create"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step 3: Review & Create */}
-        {step === 3 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Review & Create Will</CardTitle>
-              <CardDescription>
-                Confirm the details below and create your on-chain will.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4 rounded-lg border p-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Beneficiary</p>
-                  <code className="text-sm">{beneficiary}</code>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Grace Period</p>
-                  <p className="font-medium">{gracePeriod} days</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Tokens ({tokens.length})</p>
-                  <div className="space-y-1 mt-1">
-                    {tokens.map((t) => (
-                      <div key={t} className="flex items-center gap-2">
-                        <code className="text-xs truncate">{t}</code>
-                        {zeroBalanceTokens.has(t) && (
-                          <span className="text-xs text-amber-600 shrink-0">⚠ no balance</span>
-                        )}
+                  </FieldBox>
+                  {beneficiary && !isAddress(beneficiary) && (
+                    <div className="text-[13px] text-danger -mt-3">
+                      Invalid address.
+                    </div>
+                  )}
+                  {beneficiary &&
+                    isAddress(beneficiary) &&
+                    beneficiary.toLowerCase() === address?.toLowerCase() && (
+                      <div className="text-[13px] text-danger -mt-3">
+                        Can&apos;t be your own address.
                       </div>
-                    ))}
+                    )}
+
+                  <FieldBox
+                    label="Email for monthly reminders"
+                    hint="Required · only used to send your check-in"
+                  >
+                    <input
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      type="email"
+                      placeholder="you@somewhere.com"
+                      className="border-none outline-none bg-transparent w-full font-inherit text-[15px]"
+                    />
+                  </FieldBox>
+
+                  <div>
+                    <div className="text-[13px] text-ink-2 font-medium mb-2.5">
+                      Grace period
+                    </div>
+                    <div className="grid grid-cols-5 gap-2">
+                      {GRACE_OPTIONS.map((o) => {
+                        const active = gracePeriod === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            onClick={() => setGracePeriod(o.value)}
+                            className={`px-2.5 py-3.5 rounded-inputs border cursor-pointer text-center ${
+                              active
+                                ? "bg-ink text-paper border-ink"
+                                : "bg-paper text-ink border-line"
+                            }`}
+                          >
+                            <div className="text-sm font-medium">
+                              {o.label}
+                            </div>
+                            {o.hint && (
+                              <div
+                                className={`text-[10px] mt-1 ${
+                                  active ? "text-white/60" : "text-ink-3"
+                                }`}
+                              >
+                                {o.hint}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-xs text-ink-3 mt-2.5">
+                      If you stop checking in, anyone can execute your will
+                      after {gracePeriod} days of silence.
+                    </div>
                   </div>
                 </div>
+
+                {/* Sidebar */}
+                <aside className="sticky top-6 p-6 rounded-cards bg-bg-2 border border-line hidden lg:block">
+                  <div className="text-[11px] tracking-[0.14em] uppercase text-ink-3 mb-3">
+                    What happens next
+                  </div>
+                  <ol className="m-0 pl-4 text-[13px] text-ink-2 leading-relaxed space-y-1">
+                    <li>You sign one wallet message to authorize ChainWill (no gas).</li>
+                    <li>We email you on the 1st of every month.</li>
+                    <li>
+                      If you go silent for {gracePeriod} days, anyone can call{" "}
+                      <code className="mono text-xs">executeWill()</code>.
+                    </li>
+                    <li>Your tokens transfer directly to your beneficiary.</li>
+                  </ol>
+                  <div className="mt-4 pt-4 border-t border-line text-xs text-ink-3 leading-relaxed">
+                    <div className="flex items-center gap-2 text-ink font-medium mb-1.5">
+                      <Mail className="w-4 h-4" /> Sealed letter
+                    </div>
+                    A future feature: leave an encrypted note that&apos;s only
+                    revealed if your will executes.
+                    <span className="inline-block ml-1.5 px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-medium tracking-[0.06em] uppercase">
+                      Coming soon
+                    </span>
+                  </div>
+                </aside>
+              </div>
+              <NavBar
+                back={null}
+                next={() => setStep(1)}
+                nextDisabled={!step1Ok}
+              />
+            </div>
+          )}
+
+          {/* Step 2: Tokens & approvals */}
+          {step === 1 && (
+            <div>
+              <StepHeader
+                kicker="Step 02"
+                title="Pick tokens. Approve each one."
+                sub="We detected ERC-20 balances in your wallet via Alchemy. Tap to add, then approve each so the contract can transfer them later. Approvals don't lock your funds — you can spend or revoke any time."
+              />
+              <div className="grid grid-cols-1 gap-8 items-start lg:grid-cols-[1fr_320px]">
                 <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p>{email}</p>
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="text-[13px] text-ink-2 font-medium">
+                      Detected in your wallet
+                    </div>
+                    <div className="text-xs text-ink-3">
+                      via alchemy_getTokenBalances
+                    </div>
+                  </div>
+
+                  {tokensLoading && (
+                    <div className="text-sm text-ink-3 text-center py-8">
+                      Detecting tokens in your wallet...
+                    </div>
+                  )}
+
+                  <div className="bg-paper border border-line rounded-cards overflow-hidden">
+                    {!tokensLoading &&
+                      detectedTokens
+                        .filter((t) => !tokens.includes(t.address))
+                        .map((t) => (
+                          <div
+                            key={t.address}
+                            className="grid items-center gap-4 px-5 py-4 border-b border-line-2 cursor-pointer hover:bg-accent-soft/30 transition-colors"
+                            style={{
+                              gridTemplateColumns: "1fr 130px 130px",
+                            }}
+                            onClick={() =>
+                              addToken(t.address, {
+                                symbol: t.symbol,
+                                balance: t.balance,
+                              })
+                            }
+                          >
+                            <div className="flex items-center gap-3.5">
+                              <div className="w-9 h-9 rounded-[10px] bg-ink/10 flex items-center justify-center text-xs font-bold">
+                                {t.symbol[0]}
+                              </div>
+                              <div>
+                                <div className="text-[15px] font-medium">
+                                  {t.symbol}
+                                </div>
+                                <div className="mono text-[11px] text-ink-3 mt-0.5">
+                                  {t.address.slice(0, 8)}…
+                                  {t.address.slice(-6)}
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="mono text-sm">
+                                {Number(t.balance).toLocaleString(undefined, {
+                                  maximumFractionDigits: 4,
+                                })}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToken(t.address, {
+                                    symbol: t.symbol,
+                                    balance: t.balance,
+                                  });
+                                }}
+                                className="bg-transparent border border-ink text-ink px-3.5 py-1.5 rounded-pill cursor-pointer text-[13px]"
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    {tokens.map((token, i) => (
+                      <TokenApprovalRow
+                        key={token}
+                        tokenAddress={token}
+                        symbol={tokenMeta[token]?.symbol}
+                        balance={tokenMeta[token]?.balance}
+                        zeroBalanceWarning={zeroBalanceTokens.has(token)}
+                        onRemove={() => removeToken(i)}
+                        onApprovalChange={handleApprovalChange}
+                      />
+                    ))}
+                    {!tokensLoading &&
+                      detectedTokens.filter(
+                        (t) => !tokens.includes(t.address)
+                      ).length === 0 &&
+                      tokens.length === 0 && (
+                        <div className="text-sm text-ink-3 text-center py-8">
+                          No tokens detected. Add token addresses manually
+                          below.
+                        </div>
+                      )}
+                  </div>
+
+                  <div className="mt-6 p-4 rounded-inputs bg-bg-2 border border-dashed border-line">
+                    <div className="text-[13px] text-ink-2 font-medium mb-2.5">
+                      Or add a token by address
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        value={tokenInput}
+                        onChange={(e) => setTokenInput(e.target.value)}
+                        placeholder="0x… contract address"
+                        className="flex-1 px-3 py-2.5 rounded-[10px] border border-line bg-paper text-[15px] outline-none"
+                      />
+                      <button
+                        onClick={() => addToken()}
+                        disabled={!isAddress(tokenInput)}
+                        className="rounded-pill border border-ink text-ink px-4 py-2 text-[13px] cursor-pointer bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="rounded-md bg-muted/50 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    Note: Only ERC-20 tokens listed above are covered. Your wallet&apos;s native ETH
-                    is not automatically included — deposit ETH separately from the dashboard after
-                    creation.
-                  </p>
+
+                {/* Sidebar */}
+                <aside className="sticky top-6 p-6 rounded-cards bg-bg-2 border border-line hidden lg:block">
+                  <div className="text-[11px] tracking-[0.14em] uppercase text-ink-3">
+                    Approval status
+                  </div>
+                  <div className="serif text-4xl leading-none mt-1.5">
+                    {Math.min(approvedSet.size, tokens.length)}
+                    <span className="text-ink-3">/{tokens.length || 0}</span>
+                  </div>
+                  <div className="text-[13px] text-ink-3 mt-1">
+                    {tokens.length === 0
+                      ? "Pick at least one token"
+                      : allApproved
+                      ? "All set — continue"
+                      : "Approve each token before continuing"}
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-line text-xs text-ink-2 leading-relaxed">
+                    <div className="flex items-center gap-2 text-ink font-medium mb-1.5">
+                      <Info className="w-4 h-4" /> About ETH
+                    </div>
+                    ETH in your wallet isn&apos;t covered. To include ETH,
+                    deposit it into the contract from the dashboard after
+                    creating your will.
+                  </div>
+                </aside>
+              </div>
+              <NavBar
+                back={() => setStep(0)}
+                next={() => setStep(2)}
+                nextDisabled={!allApproved}
+                nextLabel={
+                  !allApproved && tokens.length > 0
+                    ? `Approve all tokens (${Math.min(
+                        approvedSet.size,
+                        tokens.length
+                      )}/${tokens.length})`
+                    : "Continue"
+                }
+              />
+            </div>
+          )}
+
+          {/* Step 3: Review & create */}
+          {step === 2 && (
+            <div>
+              <StepHeader
+                kicker="Step 03"
+                title="One signature. Then it's live."
+                sub={`This calls createWill() on the contract — beneficiary, token list, and ${gracePeriod}-day grace period in a single transaction.`}
+              />
+              <div className="bg-paper border border-line rounded-cards-lg p-9 max-w-[820px]">
+                <div className="mono text-[11px] text-ink-3 tracking-[0.14em]">
+                  CHAINWILL · INSTRUMENT · BASE
+                </div>
+                <h2 className="serif text-4xl leading-[1.1] mt-3 mb-7">
+                  The will of{" "}
+                  <span className="text-accent">{short(address || "")}</span>
+                </h2>
+                <ReviewRow k="Owner" v={<span className="mono">{address}</span>} />
+                <ReviewRow
+                  k="Beneficiary"
+                  v={<span className="mono">{beneficiary}</span>}
+                />
+                <ReviewRow
+                  k="Tokens"
+                  v={
+                    <div className="grid gap-2">
+                      {tokens.map((t) => (
+                        <div key={t} className="flex items-center gap-2.5">
+                          <span className="text-sm">
+                            {tokenMeta[t]?.balance
+                              ? Number(tokenMeta[t].balance).toLocaleString(
+                                  undefined,
+                                  { maximumFractionDigits: 4 }
+                                )
+                              : "?"}{" "}
+                            {tokenMeta[t]?.symbol || short(t)}
+                          </span>
+                          <span className="text-xs text-good">· approved</span>
+                          {zeroBalanceTokens.has(t) && (
+                            <span className="text-xs text-warn">
+                              · no balance
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      <div className="text-xs text-ink-3 mt-1">
+                        ETH covered separately via dashboard deposit
+                      </div>
+                    </div>
+                  }
+                />
+                <ReviewRow
+                  k="Grace period"
+                  v={`${gracePeriod} days of silence triggers eligibility`}
+                />
+                <ReviewRow
+                  k="Email"
+                  v={<span>{email}</span>}
+                  last
+                />
+
+                <div className="mt-6 p-4 rounded-inputs bg-bg-2 border border-dashed border-line text-[13px] text-ink-2 leading-relaxed">
+                  <b className="text-ink">Estimated gas:</b> ~$0.04 on Base.
+                  One transaction registers your beneficiary, token list, and
+                  grace period.
                 </div>
               </div>
 
               {error && (
-                <div className="rounded-lg border border-destructive p-3">
-                  <p className="text-sm text-destructive">
+                <div className="mt-4 rounded-inputs border border-danger p-3">
+                  <p className="text-sm text-danger">
                     Transaction failed: {error.message.slice(0, 100)}
                   </p>
                 </div>
               )}
 
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setStep(2)}
-                  disabled={isPending || dbSaving}
-                >
-                  Back
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={handleCreate}
-                  disabled={isPending || dbSaving}
-                >
-                  {dbSaving ? "Saving..." : isPending ? "Creating Will..." : "Create Will"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              <NavBar
+                back={() => setStep(1)}
+                next={handleCreate}
+                nextLabel={
+                  dbSaving
+                    ? "Saving..."
+                    : isPending
+                    ? "Confirming on Base…"
+                    : "Sign & create will"
+                }
+                nextDisabled={isPending || dbSaving}
+              />
+            </div>
+          )}
+        </main>
       </div>
     </WalletGuard>
+  );
+}
+
+// ─── Shared Sub-components ──────────────────────────────────────────
+
+function StepHeader({
+  kicker,
+  title,
+  sub,
+}: {
+  kicker: string;
+  title: string;
+  sub?: string;
+}) {
+  return (
+    <div className="mb-10">
+      <div className="text-xs tracking-[0.14em] uppercase text-accent mb-3.5">
+        {kicker}
+      </div>
+      <h1 className="serif text-[56px] leading-[1.02] m-0 tracking-[-0.02em] max-w-[720px]">
+        {title}
+      </h1>
+      {sub && (
+        <p className="text-[17px] leading-relaxed text-ink-2 mt-4 max-w-[600px]">
+          {sub}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FieldBox({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="flex justify-between items-baseline mb-2">
+        <span className="text-[13px] text-ink-2 font-medium">{label}</span>
+        {hint && <span className="text-xs text-ink-3">{hint}</span>}
+      </div>
+      <div className="bg-paper border border-line rounded-inputs px-3.5 py-3">
+        {children}
+      </div>
+    </label>
+  );
+}
+
+function ReviewRow({
+  k,
+  v,
+  last,
+}: {
+  k: string;
+  v: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={`grid gap-6 py-4 ${last ? "" : "border-b border-line"}`}
+      style={{ gridTemplateColumns: "180px 1fr" }}
+    >
+      <div className="text-[13px] text-ink-3 tracking-[0.05em] uppercase">
+        {k}
+      </div>
+      <div className="text-[15px] text-ink">{v}</div>
+    </div>
+  );
+}
+
+function NavBar({
+  back,
+  next,
+  nextLabel,
+  nextDisabled,
+}: {
+  back: (() => void) | null;
+  next: () => void;
+  nextLabel?: string;
+  nextDisabled?: boolean;
+}) {
+  return (
+    <div className="mt-14 flex justify-between items-center max-w-[980px]">
+      {back ? (
+        <button
+          onClick={back}
+          className="bg-transparent border-none text-ink-2 cursor-pointer text-[15px] font-medium hover:text-ink"
+        >
+          ← Back
+        </button>
+      ) : (
+        <span />
+      )}
+      <button
+        onClick={nextDisabled ? undefined : next}
+        disabled={nextDisabled}
+        className="inline-flex items-center gap-2.5 rounded-pill bg-ink text-paper px-5 py-3.5 text-[15px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {nextLabel || "Continue"} <ArrowRight className="w-4 h-4" />
+      </button>
+    </div>
   );
 }
