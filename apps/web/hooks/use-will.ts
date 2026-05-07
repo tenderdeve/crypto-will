@@ -88,6 +88,25 @@ export function useDepositETH() {
   return { depositETH, isPending: isPending || isConfirming, isSuccess, error };
 }
 
+export function useUpdateBeneficiary() {
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
+
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const updateBeneficiary = (newBeneficiary: `0x${string}`) => {
+    writeContract({
+      address: CRYPTO_WILL_ADDRESS,
+      abi: CRYPTO_WILL_ABI,
+      functionName: "updateBeneficiary",
+      args: [newBeneficiary],
+    });
+  };
+
+  return { updateBeneficiary, isPending: isPending || isConfirming, isSuccess, error };
+}
+
 export function useUpdateTokens() {
   const { writeContract, data: hash, isPending, error } = useWriteContract();
 
