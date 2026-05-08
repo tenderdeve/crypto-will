@@ -34,12 +34,19 @@ export function useWalletTokens() {
     async function fetchTokens() {
       setIsLoading(true);
       try {
-        const rpcUrl = chainId === 31337
-          ? "http://127.0.0.1:8545"
-          : process.env.NEXT_PUBLIC_ALCHEMY_URL || process.env.BASE_RPC_URL;
+        const isLocal = chainId === 31337 || chainId === 1337;
 
-        if (!rpcUrl || chainId === 31337) {
+        if (isLocal) {
           // Local dev — use known tokens
+          setDetectedAddresses(KNOWN_TOKENS);
+          setIsLoading(false);
+          return;
+        }
+
+        const rpcUrl = process.env.NEXT_PUBLIC_ALCHEMY_URL;
+
+        if (!rpcUrl) {
+          // No Alchemy URL — fall back to known tokens
           setDetectedAddresses(KNOWN_TOKENS);
           setIsLoading(false);
           return;
