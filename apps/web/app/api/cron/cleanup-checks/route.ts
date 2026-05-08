@@ -15,18 +15,18 @@ export async function GET(request: NextRequest) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     // Mark stale alive checks as expired
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("alive_checks")
       .update({ status: "expired" })
       .eq("status", "sent")
       .lt("sent_at", thirtyDaysAgo)
-      .select("*", { count: "exact", head: true });
+      .select();
 
     if (error) throw new Error(`Failed to cleanup checks: ${error.message}`);
 
     return NextResponse.json({
       success: true,
-      expired: count || 0,
+      expired: data?.length || 0,
     });
   } catch (error) {
     return NextResponse.json(
