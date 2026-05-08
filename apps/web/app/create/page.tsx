@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount } from "wagmi";
-import { isAddress } from "viem";
+import { useAccount, usePublicClient } from "wagmi";
+import { isAddress, formatUnits } from "viem";
 import { WalletGuard } from "@/components/wallet/wallet-guard";
 import { Brand } from "@/components/landing/brand";
 import { useTokenApproval } from "@/hooks/use-token-approval";
@@ -123,6 +123,7 @@ function TokenApprovalRow({
 export default function CreateWillPage() {
   const router = useRouter();
   const { address } = useAccount();
+  const publicClient = usePublicClient();
   const { hasWill, isLoading: willLoading } = useWill();
   const [step, setStep] = useState(0);
 
@@ -196,6 +197,44 @@ export default function CreateWillPage() {
       });
   }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, router]);
 
+  const fetchTokenMeta = async (tokenAddr: `0x${string}`) => {
+    if (!publicClient || !address) return;
+    try {
+      const [symbol, decimals, balance] = await Promise.all([
+        publicClient.readContract({
+          address: tokenAddr,
+          abi: [{ type: "function", name: "symbol", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" }] as const,
+          functionName: "symbol",
+        }),
+        publicClient.readContract({
+          address: tokenAddr,
+          abi: [{ type: "function", name: "decimals", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" }] as const,
+          functionName: "decimals",
+        }),
+        publicClient.readContract({
+          address: tokenAddr,
+          abi: [{ type: "function", name: "balanceOf", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" }] as const,
+          functionName: "balanceOf",
+          args: [address],
+        }),
+      ]);
+      const formatted = formatUnits(balance, decimals);
+      setTokenMeta((prev) => ({ ...prev, [tokenAddr]: { symbol, balance: formatted } }));
+      if (balance === BigInt(0)) {
+        setZeroBalanceTokens((prev) => new Set(prev).add(tokenAddr));
+      } else {
+        setZeroBalanceTokens((prev) => {
+          const next = new Set(prev);
+          next.delete(tokenAddr);
+          return next;
+        });
+      }
+    } catch {
+      // Contract doesn't support ERC-20 interface
+      setZeroBalanceTokens((prev) => new Set(prev).add(tokenAddr));
+    }
+  };
+
   const addToken = (
     addr?: `0x${string}`,
     meta?: { symbol: string; balance: string }
@@ -215,7 +254,8 @@ export default function CreateWillPage() {
           [tokenAddr]: { symbol: detected.symbol, balance: detected.balance },
         }));
       } else {
-        setZeroBalanceTokens((prev) => new Set(prev).add(tokenAddr));
+        // Fetch symbol + balance from chain
+        fetchTokenMeta(tokenAddr);
       }
     }
     setTokenInput("");
