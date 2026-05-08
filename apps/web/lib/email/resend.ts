@@ -52,6 +52,46 @@ export async function sendAliveCheckEmail(params: {
   });
 }
 
+export async function sendExpiryWarningEmail(params: {
+  to: string;
+  ownerAddress: string;
+  daysLeft: number;
+  beneficiaryAddress: string;
+}) {
+  const resend = getResend();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  await resend.emails.send({
+    from: "CryptoWill <noreply@cryptowill.xyz>",
+    to: params.to,
+    subject: `CryptoWill — Your will executes in ${params.daysLeft} days`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #dc2626;">⚠️ Urgent: Will Expiring Soon</h1>
+        <p style="color: #4a4a4a; font-size: 16px;">
+          Your CryptoWill will be <strong>executed in ${params.daysLeft} day${params.daysLeft === 1 ? "" : "s"}</strong>
+          if you don't confirm you're alive.
+        </p>
+        <p style="color: #4a4a4a; font-size: 16px;">
+          Wallet: <code>${params.ownerAddress.slice(0, 6)}...${params.ownerAddress.slice(-4)}</code><br/>
+          Beneficiary: <code>${params.beneficiaryAddress.slice(0, 6)}...${params.beneficiaryAddress.slice(-4)}</code>
+        </p>
+        <p style="color: #4a4a4a; font-size: 16px;">
+          All approved tokens and deposited ETH will be transferred to your beneficiary
+          if you do not check in.
+        </p>
+        <a href="${appUrl}/dashboard" style="display: inline-block; background: #dc2626; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+          Confirm I'm Alive Now
+        </a>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+        <p style="color: #888; font-size: 12px;">
+          CryptoWill — Protecting your crypto legacy. This is an urgent reminder because your grace period is about to expire.
+        </p>
+      </div>
+    `,
+  });
+}
+
 export async function sendWillExecutedEmail(params: {
   to: string;
   beneficiaryAddress: string;

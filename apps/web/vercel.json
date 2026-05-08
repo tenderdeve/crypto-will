@@ -2,11 +2,19 @@
   "crons": [
     {
       "path": "/api/cron/send-alive-checks",
-      "schedule": "0 10 1 * *"
+      "schedule": "0 10 * * *"
     },
     {
       "path": "/api/cron/check-expired",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/send-expiry-warning",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-checks",
+      "schedule": "0 3 * * 0"
     }
   ]
 }
