@@ -5,7 +5,7 @@ import { CRYPTO_WILL_ABI, CRYPTO_WILL_ADDRESS } from "@/lib/chain/contracts";
 import { sendWillExecutedEmail } from "@/lib/email/resend";
 import { getSupabaseAdmin } from "@/lib/db/supabase";
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     // Verify cron secret
     const authHeader = request.headers.get("authorization");

@@ -5,7 +5,7 @@ import { getUserByWallet } from "@/lib/db/queries/users";
 import { sendAliveCheckEmail } from "@/lib/email/resend";
 import { getSupabaseAdmin } from "@/lib/db/supabase";
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     // Verify cron secret
     const authHeader = request.headers.get("authorization");
