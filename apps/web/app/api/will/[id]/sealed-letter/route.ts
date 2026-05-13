@@ -8,6 +8,8 @@ import {
 } from "@/lib/db/queries/sealed-letters";
 import { sealedLetterSchema } from "@/lib/validations/schemas";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * GET /api/will/[id]/sealed-letter
  *
@@ -21,6 +23,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    if (!UUID_RE.test(id)) {
+      return NextResponse.json(
+        { error: "Invalid will ID", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
+    }
+
     const walletAddress = request.headers.get("x-wallet-address");
     if (!walletAddress) {
       return NextResponse.json(
@@ -87,6 +96,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    if (!UUID_RE.test(id)) {
+      return NextResponse.json(
+        { error: "Invalid will ID", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
+    }
+
     const walletAddress = request.headers.get("x-wallet-address");
     if (!walletAddress) {
       return NextResponse.json(

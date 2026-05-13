@@ -102,13 +102,15 @@ export async function encryptLetter(
 
 /**
  * Decrypt a sealed letter using the original password.
- * Throws if the password is wrong or ciphertext is corrupted.
+ * Verifies the content hash after decryption as a defense-in-depth measure.
+ * Throws if the password is wrong, ciphertext is corrupted, or hash mismatches.
  */
 export async function decryptLetter(
   ciphertext: string,
   iv: string,
   salt: string,
-  password: string
+  password: string,
+  expectedHash?: string
 ): Promise<string> {
   const key = await deriveKey(password, fromBase64(salt));
 
@@ -118,5 +120,15 @@ export async function decryptLetter(
     fromBase64(ciphertext)
   );
 
-  return new TextDecoder().decode(decrypted);
+  const plaintext = new TextDecoder().decode(decrypted);
+
+  // Verify content hash if provided (defense-in-depth on top of GCM auth)
+  if (expectedHash) {
+    const actualHash = await hashPlaintext(plaintext);
+    if (actualHash !== expectedHash) {
+      throw new Error("Content hash mismatch — data may have been tampered with.");
+    }
+  }
+
+  return plaintext;
 }

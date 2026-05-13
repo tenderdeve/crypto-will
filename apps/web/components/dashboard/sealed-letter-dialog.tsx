@@ -103,7 +103,8 @@ export function SealedLetterDialog({
         letter.encrypted_content,
         letter.iv,
         letter.salt,
-        decryptPassword
+        decryptPassword,
+        letter.content_hash
       );
       setDecryptedMessage(plaintext);
     } catch {

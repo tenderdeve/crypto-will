@@ -69,7 +69,8 @@ export function SealedLetterReveal({
         letter.encrypted_content,
         letter.iv,
         letter.salt,
-        password
+        password,
+        letter.content_hash
       );
       setPlaintext(text);
     } catch {

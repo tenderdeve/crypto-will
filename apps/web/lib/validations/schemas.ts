@@ -20,11 +20,18 @@ export const walletAuthSchema = z.object({
   signature: z.string().min(1),
 });
 
+// Base64 pattern (standard, no whitespace)
+const base64 = z.string().regex(/^[A-Za-z0-9+/]+=*$/, "Invalid base64");
+
 export const sealedLetterSchema = z.object({
-  encryptedContent: z.string().min(1, "Encrypted content is required"),
-  iv: z.string().min(1, "IV is required"),
-  salt: z.string().min(1, "Salt is required"),
-  contentHash: z.string().min(1, "Content hash is required"),
+  // 10 KB plaintext -> ~10,256 bytes ciphertext (+ 16-byte GCM tag) -> ~13,676 base64 chars; cap at 14,000
+  encryptedContent: base64.min(1, "Encrypted content is required").max(14_000, "Encrypted content too large"),
+  // 12-byte IV -> 16 base64 chars
+  iv: base64.min(1, "IV is required").max(24, "IV too large"),
+  // 16-byte salt -> 24 base64 chars
+  salt: base64.min(1, "Salt is required").max(24, "Salt too large"),
+  // SHA-256 digest -> 32 bytes -> 44 base64 chars
+  contentHash: base64.min(1, "Content hash is required").max(44, "Content hash too large"),
 });
 
 export type CreateWillInput = z.infer<typeof createWillSchema>;
