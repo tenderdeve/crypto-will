@@ -9,7 +9,6 @@ import { Brand } from "@/components/landing/brand";
 import { useTokenApproval } from "@/hooks/use-token-approval";
 import { useCreateWill } from "@/hooks/use-create-will";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
-import { useWill } from "@/hooks/use-will";
 import { useEnsAddress } from "@/hooks/use-ens-address";
 import { Shield, Mail, Check, ArrowRight, Info, Loader2 } from "lucide-react";
 import { useTokenPrices } from "@/hooks/use-token-prices";
@@ -134,15 +133,7 @@ export default function CreateWillPage() {
   const router = useRouter();
   const { address } = useAccount();
   const publicClient = usePublicClient();
-  const { hasWill, isLoading: willLoading } = useWill();
   const [step, setStep] = useState(0);
-
-  // Redirect to dashboard if wallet already has a will
-  useEffect(() => {
-    if (!willLoading && hasWill) {
-      router.replace("/dashboard");
-    }
-  }, [willLoading, hasWill, router]);
 
   // Step 1 state
   const [beneficiary, setBeneficiary] = useState("");
@@ -192,7 +183,7 @@ export default function CreateWillPage() {
   );
 
   // Step 3
-  const { createWill, isPending, isSuccess, hash, error } = useCreateWill();
+  const { createWill, isPending, isSuccess, hash, error, willId: contractWillId } = useCreateWill();
   const [dbSaving, setDbSaving] = useState(false);
   const dbSaveAttempted = useRef(false);
 
@@ -214,6 +205,8 @@ export default function CreateWillPage() {
         contractTxHash: hash,
         email: email || undefined,
         beneficiaryEmail: beneficiaryEmail || undefined,
+        contractWillId: contractWillId !== undefined ? Number(contractWillId) : undefined,
+        contractVersion: 2,
       }),
     })
       .catch(() => {})
@@ -221,7 +214,7 @@ export default function CreateWillPage() {
         setDbSaving(false);
         router.push("/dashboard");
       });
-  }, [isSuccess, hash, address, resolvedBeneficiary, tokens, gracePeriod, email, beneficiaryEmail, router]);
+  }, [isSuccess, hash, address, resolvedBeneficiary, tokens, gracePeriod, email, beneficiaryEmail, router, contractWillId]);
 
   const fetchTokenMeta = async (tokenAddr: `0x${string}`) => {
     if (!publicClient || !address) return;
