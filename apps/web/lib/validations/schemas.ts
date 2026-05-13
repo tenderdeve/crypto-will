@@ -20,6 +20,14 @@ export const walletAuthSchema = z.object({
   signature: z.string().min(1),
 });
 
+export const sealedLetterSchema = z.object({
+  encryptedContent: z.string().min(1, "Encrypted content is required"),
+  iv: z.string().min(1, "IV is required"),
+  salt: z.string().min(1, "Salt is required"),
+  contentHash: z.string().min(1, "Content hash is required"),
+});
+
 export type CreateWillInput = z.infer<typeof createWillSchema>;
 export type AliveCheckInput = z.infer<typeof aliveCheckSchema>;
 export type WalletAuthInput = z.infer<typeof walletAuthSchema>;
+export type SealedLetterInput = z.infer<typeof sealedLetterSchema>;

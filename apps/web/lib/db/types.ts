@@ -30,3 +30,14 @@ export interface AliveCheck {
   token: string;
   status: AliveCheckStatus;
 }
+
+export interface SealedLetter {
+  id: string;
+  will_id: string;
+  encrypted_content: string;
+  iv: string;
+  salt: string;
+  content_hash: string;
+  created_at: string;
+  updated_at: string;
+}

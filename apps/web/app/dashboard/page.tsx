@@ -69,6 +69,19 @@ export default function DashboardPage() {
     error: beneficiaryError,
   } = useUpdateBeneficiary();
 
+  // DB will ID — needed for sealed letter and other DB-backed features
+  const [dbWillId, setDbWillId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    fetch("/api/will", { headers: { "x-wallet-address": address } })
+      .then((r) => r.json())
+      .then((data) => {
+        const id = data?.wills?.[0]?.id;
+        if (id) setDbWillId(id);
+      })
+      .catch(() => {});
+  }, [address]);
+
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
   const revokeSynced = useRef(false);
@@ -273,6 +286,7 @@ export default function DashboardPage() {
               <BeneficiaryCard
                 beneficiary={will.beneficiary}
                 ownerAddress={address || ""}
+                willId={dbWillId || ""}
                 onUpdate={updateBeneficiary}
                 isPending={isUpdatingBeneficiary}
                 isSuccess={beneficiarySuccess}
