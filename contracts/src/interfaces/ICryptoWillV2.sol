@@ -17,6 +17,12 @@ interface ICryptoWillV2 {
         NFTType nftType;        // ERC721 or ERC1155
     }
 
+    struct GuardianConfig {
+        address[] guardians;    // 2-5 guardian addresses
+        uint8 threshold;        // M-of-N required votes
+        uint256 votingWindow;   // seconds allowed for voting (7-30 days)
+    }
+
     struct Will {
         address owner;
         address beneficiary;
@@ -25,6 +31,7 @@ interface ICryptoWillV2 {
         uint256 lastAlive;
         uint256 gracePeriod;
         bool active;
+        GuardianConfig guardianConfig;
     }
 
     // ─── Custom Errors ──────────────────────────────────────────────────
@@ -46,6 +53,15 @@ interface ICryptoWillV2 {
     error InvalidSignature();
     error TooManyWills();
     error WillIdOutOfRange();
+    error TooManyGuardians();
+    error InvalidThreshold();
+    error InvalidVotingWindow();
+    error NotAGuardian();
+    error AlreadyVoted();
+    error VotingNotStarted();
+    error VotingWindowExpired();
+    error ThresholdNotMet();
+    error VotingAlreadyStarted();
 
     // ─── Events ─────────────────────────────────────────────────────────
 
@@ -61,6 +77,10 @@ interface ICryptoWillV2 {
     event NFTTransferFailed(address indexed contractAddr, uint256 tokenId, address indexed owner, address indexed beneficiary);
     event ETHPendingClaim(address indexed beneficiary, uint256 amount);
     event ETHClaimed(address indexed beneficiary, uint256 amount);
+    event GuardiansSet(address indexed owner, uint256 willId, address[] guardians, uint8 threshold);
+    event VotingStarted(address indexed owner, uint256 willId, uint256 timestamp);
+    event GuardianVoted(address indexed owner, uint256 willId, address indexed guardian, string voteType);
+    event VotingWindowReset(address indexed owner, uint256 willId);
 
     // ─── Functions ──────────────────────────────────────────────────────
 
@@ -133,4 +153,47 @@ interface ICryptoWillV2 {
     /// @param owner Address of the will owner
     /// @return Array of active will IDs
     function getActiveWillIds(address owner) external view returns (uint256[] memory);
+
+    /// @notice Set guardian configuration for a will
+    /// @param willId The ID of the will
+    /// @param guardians Array of guardian addresses (2-5)
+    /// @param threshold Number of votes required (M-of-N)
+    /// @param votingWindow Time in seconds allowed for voting (7-30 days)
+    function setGuardians(uint256 willId, address[] calldata guardians, uint8 threshold, uint256 votingWindow) external;
+
+    /// @notice Start the guardian voting process for a will whose grace period expired
+    /// @param owner Address of the will owner
+    /// @param willId The ID of the will
+    function startVoting(address owner, uint256 willId) external;
+
+    /// @notice Cast a vote to execute the will
+    /// @param owner Address of the will owner
+    /// @param willId The ID of the will
+    function voteToExecute(address owner, uint256 willId) external;
+
+    /// @notice Cast a vote that the owner is alive (resets lastAlive if threshold met)
+    /// @param owner Address of the will owner
+    /// @param willId The ID of the will
+    function voteAlive(address owner, uint256 willId) external;
+
+    /// @notice Get the guardian configuration for a will
+    /// @param owner Address of the will owner
+    /// @param willId The ID of the will
+    /// @return The GuardianConfig for the will
+    function getGuardianConfig(address owner, uint256 willId) external view returns (GuardianConfig memory);
+
+    /// @notice Get the current voting status for a will
+    /// @param owner Address of the will owner
+    /// @param willId The ID of the will
+    /// @return votes Current vote count
+    /// @return threshold Required votes
+    /// @return votingEndsAt Timestamp when voting window closes
+    function getVoteStatus(address owner, uint256 willId) external view returns (uint256 votes, uint256 threshold, uint256 votingEndsAt);
+
+    /// @notice Check if a guardian has voted for a specific will
+    /// @param owner Address of the will owner
+    /// @param willId The ID of the will
+    /// @param guardian Address of the guardian to check
+    /// @return Whether the guardian has voted
+    function hasVoted(address owner, uint256 willId, address guardian) external view returns (bool);
 }
