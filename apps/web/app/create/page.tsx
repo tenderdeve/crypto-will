@@ -136,6 +136,7 @@ export default function CreateWillPage() {
 
   // Step 1 state
   const [beneficiary, setBeneficiary] = useState("");
+  const [beneficiaryEmail, setBeneficiaryEmail] = useState("");
   const [email, setEmail] = useState("");
   const [gracePeriod, setGracePeriod] = useState(90);
 
@@ -188,6 +189,7 @@ export default function CreateWillPage() {
         gracePeriodDays: gracePeriod,
         contractTxHash: hash,
         email: email || undefined,
+        beneficiaryEmail: beneficiaryEmail || undefined,
       }),
     })
       .catch(() => {})
@@ -195,7 +197,7 @@ export default function CreateWillPage() {
         setDbSaving(false);
         router.push("/dashboard");
       });
-  }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, router]);
+  }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, beneficiaryEmail, router]);
 
   const fetchTokenMeta = async (tokenAddr: `0x${string}`) => {
     if (!publicClient || !address) return;
@@ -286,7 +288,8 @@ export default function CreateWillPage() {
     isAddress(beneficiary) &&
     beneficiary.toLowerCase() !== address?.toLowerCase();
   const validEmail = /\S+@\S+\.\S+/.test(email);
-  const step1Ok = validAddr && validEmail;
+  const validBeneficiaryEmail = !beneficiaryEmail || /\S+@\S+\.\S+/.test(beneficiaryEmail);
+  const step1Ok = validAddr && validEmail && validBeneficiaryEmail;
 
   const short = (a: string) =>
     a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
@@ -392,6 +395,24 @@ export default function CreateWillPage() {
                         Can&apos;t be your own address.
                       </div>
                     )}
+
+                  <FieldBox
+                    label="Beneficiary email"
+                    hint="Optional — we'll notify them when your will executes"
+                  >
+                    <input
+                      value={beneficiaryEmail}
+                      onChange={(e) => setBeneficiaryEmail(e.target.value)}
+                      type="email"
+                      placeholder="beneficiary@somewhere.com"
+                      className="border-none outline-none bg-transparent w-full font-inherit text-[15px]"
+                    />
+                  </FieldBox>
+                  {beneficiaryEmail && !/\S+@\S+\.\S+/.test(beneficiaryEmail) && (
+                    <div className="text-[13px] text-danger -mt-3">
+                      Invalid email address.
+                    </div>
+                  )}
 
                   <FieldBox
                     label="Email for monthly reminders"
@@ -704,8 +725,15 @@ export default function CreateWillPage() {
                 <ReviewRow
                   k="Email"
                   v={<span>{email}</span>}
-                  last
+                  last={!beneficiaryEmail}
                 />
+                {beneficiaryEmail && (
+                  <ReviewRow
+                    k="Beneficiary email"
+                    v={<span>{beneficiaryEmail}</span>}
+                    last
+                  />
+                )}
 
                 <div className="mt-6 p-4 rounded-inputs bg-bg-2 border border-dashed border-line text-[13px] text-ink-2 leading-relaxed">
                   <b className="text-ink">Estimated gas:</b> ~$0.04 on Base.
