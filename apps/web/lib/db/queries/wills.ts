@@ -7,6 +7,8 @@ export async function createWill(params: {
   tokenAddresses: string[];
   contractTxHash: string;
   gracePeriodDays: number;
+  contractWillId?: number;
+  contractVersion?: number;
 }): Promise<Will> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -20,6 +22,8 @@ export async function createWill(params: {
       status: "active",
       last_alive_at: new Date().toISOString(),
       next_check_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      contract_will_id: params.contractWillId ?? null,
+      contract_version: params.contractVersion ?? 1,
     })
     .select()
     .single();
@@ -35,10 +39,25 @@ export async function getWillByUserId(userId: string): Promise<Will | null> {
     .select("*")
     .eq("user_id", userId)
     .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .limit(1)
     .single();
 
   if (error || !data) return null;
   return data as Will;
+}
+
+export async function getWillsByUserId(userId: string): Promise<Will[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("wills")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(`Failed to query wills: ${error.message}`);
+  return (data || []) as Will[];
 }
 
 export async function getWillById(id: string): Promise<Will | null> {

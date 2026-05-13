@@ -13,6 +13,7 @@ import { BeneficiaryCard } from "@/components/dashboard/beneficiary-card";
 import { ETHDepositCard } from "@/components/dashboard/eth-deposit-card";
 import { ActivityList } from "@/components/dashboard/activity-list";
 import { TrustStrip } from "@/components/dashboard/trust-strip";
+import { WillSelector } from "@/components/dashboard/will-selector";
 import {
   useWill,
   useSignAlive,
@@ -247,6 +248,16 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* Create another will link */}
+            <div className="mb-6">
+              <Link
+                href="/create"
+                className="text-accent text-sm font-medium no-underline hover:underline"
+              >
+                + Create another will
+              </Link>
+            </div>
+
             {/* Checkin card */}
             <CheckinCard
               grace={inGrace}
@@ -300,7 +311,7 @@ export default function DashboardPage() {
                   disabled={revokeSuccess}
                   className="rounded-pill border border-danger text-danger bg-transparent px-5 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-50"
                 >
-                  {revokeSuccess ? "Revoked ✓" : "Revoke Will"}
+                  {revokeSuccess ? "Revoked" : "Revoke Will"}
                 </button>
               ) : (
                 <div className="rounded-cards border border-danger p-6 max-w-[600px] space-y-3">

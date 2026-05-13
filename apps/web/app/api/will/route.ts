@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createWillSchema } from "@/lib/validations/schemas";
-import { createWill, getWillByUserId } from "@/lib/db/queries/wills";
+import { createWill, getWillsByUserId } from "@/lib/db/queries/wills";
 import { getUserByWallet, createUser, updateUserEmail } from "@/lib/db/queries/users";
 import { getPublicClient } from "@/lib/chain/client";
 
@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
       tokenAddresses: parsed.data.tokenAddresses,
       contractTxHash: parsed.data.contractTxHash,
       gracePeriodDays: parsed.data.gracePeriodDays,
+      contractWillId: parsed.data.contractWillId,
+      contractVersion: parsed.data.contractVersion,
     });
 
     return NextResponse.json({ will }, { status: 201 });
@@ -84,8 +86,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ wills: [] });
     }
 
-    const will = await getWillByUserId(user.id);
-    return NextResponse.json({ wills: will ? [will] : [] });
+    const wills = await getWillsByUserId(user.id);
+    return NextResponse.json({ wills });
   } catch (error) {
     return NextResponse.json(
       { error: "Internal server error", code: "INTERNAL_ERROR" },

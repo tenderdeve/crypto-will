@@ -19,6 +19,8 @@ export interface Will {
   last_alive_at: string;
   next_check_at: string;
   created_at: string;
+  contract_will_id: number | null;
+  contract_version: number;
 }
 
 export interface AliveCheck {
