@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { parseEther, formatEther } from "viem";
+import { TokenPrice } from "@/lib/prices/types";
+import { formatUSD } from "@/lib/format";
 
 export function ETHDepositCard({
   depositedETH,
@@ -9,12 +11,14 @@ export function ETHDepositCard({
   isPending,
   isSuccess,
   error,
+  ethPrice,
 }: {
   depositedETH: bigint;
   onDeposit: (wei: bigint) => void;
   isPending: boolean;
   isSuccess: boolean;
   error: Error | null;
+  ethPrice?: TokenPrice;
 }) {
   const [amt, setAmt] = useState("");
 
@@ -48,6 +52,11 @@ export function ETHDepositCard({
           {formatEther(depositedETH)} ETH{" "}
           <span className="text-ink-3 text-[22px]">deposited</span>
         </div>
+        {ethPrice && depositedETH > BigInt(0) && (
+          <div className="text-sm text-ink-2 mt-1.5 mono">
+            {formatUSD(Number(formatEther(depositedETH)) * ethPrice.usd)}
+          </div>
+        )}
         <div className="text-sm text-ink-2 leading-relaxed mt-3 max-w-[460px]">
           Unlike ERC-20s (which stay in your wallet under approval), ETH must
           be <em>parked</em> in the contract. You can withdraw it any time.

@@ -11,6 +11,8 @@ import { useCreateWill } from "@/hooks/use-create-will";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
 import { useWill } from "@/hooks/use-will";
 import { Shield, Mail, Check, ArrowRight, Info } from "lucide-react";
+import { useTokenPrices } from "@/hooks/use-token-prices";
+import { formatUSD } from "@/lib/format";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -37,6 +39,7 @@ function TokenApprovalRow({
   zeroBalanceWarning,
   onRemove,
   onApprovalChange,
+  usdValue,
 }: {
   tokenAddress: `0x${string}`;
   symbol?: string;
@@ -44,6 +47,7 @@ function TokenApprovalRow({
   zeroBalanceWarning?: boolean;
   onRemove: () => void;
   onApprovalChange: (addr: string, approved: boolean) => void;
+  usdValue?: number | null;
 }) {
   const { isApproved, approve, isPending, error } = useTokenApproval(tokenAddress);
 
@@ -81,6 +85,11 @@ function TokenApprovalRow({
                   maximumFractionDigits: 4,
                 })}
               </div>
+              {usdValue != null && usdValue > 0 && (
+                <div className="mono text-[11px] text-ink-3 mt-0.5">
+                  {formatUSD(usdValue)}
+                </div>
+              )}
               {zeroBalanceWarning && (
                 <div className="text-xs text-warn">no balance</div>
               )}
@@ -151,6 +160,12 @@ export default function CreateWillPage() {
   const [approvedSet, setApprovedSet] = useState<Set<string>>(new Set());
   const { tokens: detectedTokens, isLoading: tokensLoading } =
     useWalletTokens();
+  // Gather all token addresses (detected + manually added) for price lookup
+  const allTokenAddresses = [
+    ...detectedTokens.map((t) => t.address),
+    ...tokens,
+  ].filter((a, i, arr) => arr.indexOf(a) === i);
+  const { prices } = useTokenPrices(allTokenAddresses);
   const allApproved =
     tokens.length > 0 && tokens.every((t) => approvedSet.has(t));
 
@@ -509,68 +524,83 @@ export default function CreateWillPage() {
                     {!tokensLoading &&
                       detectedTokens
                         .filter((t) => !tokens.includes(t.address))
-                        .map((t) => (
-                          <div
-                            key={t.address}
-                            className="grid items-center gap-4 px-5 py-4 border-b border-line-2 cursor-pointer hover:bg-accent-soft/30 transition-colors"
-                            style={{
-                              gridTemplateColumns: "1fr 130px 130px",
-                            }}
-                            onClick={() =>
-                              addToken(t.address, {
-                                symbol: t.symbol,
-                                balance: t.balance,
-                              })
-                            }
-                          >
-                            <div className="flex items-center gap-3.5">
-                              <div className="w-9 h-9 rounded-[10px] bg-ink/10 flex items-center justify-center text-xs font-bold">
-                                {t.symbol[0]}
+                        .map((t) => {
+                          const price = prices?.[t.address.toLowerCase()];
+                          const usdValue = price ? price.usd * Number(t.balance) : null;
+                          return (
+                            <div
+                              key={t.address}
+                              className="grid items-center gap-4 px-5 py-4 border-b border-line-2 cursor-pointer hover:bg-accent-soft/30 transition-colors"
+                              style={{
+                                gridTemplateColumns: "1fr 130px 130px",
+                              }}
+                              onClick={() =>
+                                addToken(t.address, {
+                                  symbol: t.symbol,
+                                  balance: t.balance,
+                                })
+                              }
+                            >
+                              <div className="flex items-center gap-3.5">
+                                <div className="w-9 h-9 rounded-[10px] bg-ink/10 flex items-center justify-center text-xs font-bold">
+                                  {t.symbol[0]}
+                                </div>
+                                <div>
+                                  <div className="text-[15px] font-medium">
+                                    {t.symbol}
+                                  </div>
+                                  <div className="mono text-[11px] text-ink-3 mt-0.5">
+                                    {t.address.slice(0, 8)}…
+                                    {t.address.slice(-6)}
+                                  </div>
+                                </div>
                               </div>
                               <div>
-                                <div className="text-[15px] font-medium">
-                                  {t.symbol}
+                                <div className="mono text-sm">
+                                  {Number(t.balance).toLocaleString(undefined, {
+                                    maximumFractionDigits: 4,
+                                  })}
                                 </div>
-                                <div className="mono text-[11px] text-ink-3 mt-0.5">
-                                  {t.address.slice(0, 8)}…
-                                  {t.address.slice(-6)}
-                                </div>
+                                {usdValue !== null && (
+                                  <div className="mono text-[11px] text-ink-3 mt-0.5">
+                                    {formatUSD(usdValue)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToken(t.address, {
+                                      symbol: t.symbol,
+                                      balance: t.balance,
+                                    });
+                                  }}
+                                  className="bg-transparent border border-ink text-ink px-3.5 py-1.5 rounded-pill cursor-pointer text-[13px]"
+                                >
+                                  + Add
+                                </button>
                               </div>
                             </div>
-                            <div>
-                              <div className="mono text-sm">
-                                {Number(t.balance).toLocaleString(undefined, {
-                                  maximumFractionDigits: 4,
-                                })}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  addToken(t.address, {
-                                    symbol: t.symbol,
-                                    balance: t.balance,
-                                  });
-                                }}
-                                className="bg-transparent border border-ink text-ink px-3.5 py-1.5 rounded-pill cursor-pointer text-[13px]"
-                              >
-                                + Add
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                    {tokens.map((token, i) => (
-                      <TokenApprovalRow
-                        key={token}
-                        tokenAddress={token}
-                        symbol={tokenMeta[token]?.symbol}
-                        balance={tokenMeta[token]?.balance}
-                        zeroBalanceWarning={zeroBalanceTokens.has(token)}
-                        onRemove={() => removeToken(i)}
-                        onApprovalChange={handleApprovalChange}
-                      />
-                    ))}
+                          );
+                        })}
+                    {tokens.map((token, i) => {
+                      const price = prices?.[token.toLowerCase()];
+                      const bal = tokenMeta[token]?.balance;
+                      const usd = price && bal ? price.usd * Number(bal) : null;
+                      return (
+                        <TokenApprovalRow
+                          key={token}
+                          tokenAddress={token}
+                          symbol={tokenMeta[token]?.symbol}
+                          balance={bal}
+                          zeroBalanceWarning={zeroBalanceTokens.has(token)}
+                          onRemove={() => removeToken(i)}
+                          onApprovalChange={handleApprovalChange}
+                          usdValue={usd}
+                        />
+                      );
+                    })}
                     {!tokensLoading &&
                       detectedTokens.filter(
                         (t) => !tokens.includes(t.address)
