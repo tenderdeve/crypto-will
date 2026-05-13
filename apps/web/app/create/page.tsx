@@ -9,13 +9,14 @@ import { Brand } from "@/components/landing/brand";
 import { useTokenApproval } from "@/hooks/use-token-approval";
 import { useCreateWill } from "@/hooks/use-create-will";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
+import { NFTSelector, type SelectedNFT } from "@/components/create/nft-selector";
 import { Shield, Mail, Check, ArrowRight, Info } from "lucide-react";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
 const STEPS = [
   { id: "details", n: "01", t: "Details" },
-  { id: "tokens", n: "02", t: "Tokens & approvals" },
+  { id: "tokens", n: "02", t: "Tokens, NFTs & approvals" },
   { id: "review", n: "03", t: "Review & create" },
 ];
 
@@ -142,8 +143,28 @@ export default function CreateWillPage() {
   const [approvedSet, setApprovedSet] = useState<Set<string>>(new Set());
   const { tokens: detectedTokens, isLoading: tokensLoading } =
     useWalletTokens();
-  const allApproved =
+
+  // NFT state
+  const [selectedNFTs, setSelectedNFTs] = useState<SelectedNFT[]>([]);
+  const [nftApprovedSet, setNftApprovedSet] = useState<Set<string>>(new Set());
+
+  // All token approvals must pass, and all NFT contract approvals must pass
+  const allTokensApproved =
     tokens.length > 0 && tokens.every((t) => approvedSet.has(t));
+  const hasAssets = tokens.length > 0 || selectedNFTs.length > 0;
+
+  // Get unique NFT contract addresses that need approval
+  const nftContractAddrs = Array.from(
+    new Set(selectedNFTs.map((n) => n.contractAddress.toLowerCase()))
+  );
+  const allNftApproved =
+    selectedNFTs.length === 0 ||
+    nftContractAddrs.every((addr) => nftApprovedSet.has(addr));
+
+  const allApproved =
+    hasAssets &&
+    (tokens.length === 0 || allTokensApproved) &&
+    allNftApproved;
 
   const handleApprovalChange = useCallback(
     (addr: string, approved: boolean) => {
@@ -157,8 +178,20 @@ export default function CreateWillPage() {
     []
   );
 
+  const handleNftApprovalChange = useCallback(
+    (addr: string, approved: boolean) => {
+      setNftApprovedSet((prev) => {
+        const next = new Set(prev);
+        if (approved) next.add(addr.toLowerCase());
+        else next.delete(addr.toLowerCase());
+        return next;
+      });
+    },
+    []
+  );
+
   // Step 3
-  const { createWill, isPending, isSuccess, hash, error, willId: contractWillId } = useCreateWill();
+  const { createWill, createWillWithNFTs, isPending, isSuccess, hash, error, willId: contractWillId } = useCreateWill();
   const [dbSaving, setDbSaving] = useState(false);
   const dbSaveAttempted = useRef(false);
 
@@ -181,6 +214,14 @@ export default function CreateWillPage() {
         email: email || undefined,
         contractWillId: contractWillId !== undefined ? Number(contractWillId) : undefined,
         contractVersion: 2,
+        nfts: selectedNFTs.map((n) => ({
+          contractAddress: n.contractAddress,
+          tokenId: n.tokenId,
+          amount: String(n.amount),
+          nftType: n.nftType,
+          name: n.name,
+          imageUrl: n.imageUrl,
+        })),
       }),
     })
       .catch(() => {})
@@ -188,7 +229,7 @@ export default function CreateWillPage() {
         setDbSaving(false);
         router.push("/dashboard");
       });
-  }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, router, contractWillId]);
+  }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, router, contractWillId, selectedNFTs]);
 
   const fetchTokenMeta = async (tokenAddr: `0x${string}`) => {
     if (!publicClient || !address) return;
@@ -271,7 +312,22 @@ export default function CreateWillPage() {
 
   const handleCreate = () => {
     const gracePeriodSeconds = BigInt(gracePeriod * 24 * 60 * 60);
-    createWill(beneficiary as `0x${string}`, tokens, gracePeriodSeconds);
+    if (selectedNFTs.length > 0) {
+      const nftItems = selectedNFTs.map((n) => ({
+        contractAddr: n.contractAddress as `0x${string}`,
+        tokenId: BigInt(n.tokenId),
+        amount: BigInt(n.amount),
+        nftType: n.nftType === "erc721" ? 0 : 1,
+      }));
+      createWillWithNFTs(
+        beneficiary as `0x${string}`,
+        tokens,
+        nftItems,
+        gracePeriodSeconds
+      );
+    } else {
+      createWill(beneficiary as `0x${string}`, tokens, gracePeriodSeconds);
+    }
   };
 
   // Validation
@@ -596,6 +652,22 @@ export default function CreateWillPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* ─── NFT Selection ─── */}
+                  <div className="mt-8 pt-8 border-t border-line">
+                    <div className="text-[13px] text-ink-2 font-medium mb-1">
+                      NFTs (optional)
+                    </div>
+                    <p className="text-xs text-ink-3 mb-4">
+                      Select ERC-721 and ERC-1155 NFTs to include in your will.
+                      Each NFT contract needs a one-time setApprovalForAll.
+                    </p>
+                    <NFTSelector
+                      selectedNFTs={selectedNFTs}
+                      onSelectionChange={setSelectedNFTs}
+                      onApprovalChange={handleNftApprovalChange}
+                    />
+                  </div>
                 </div>
 
                 {/* Sidebar */}
@@ -606,13 +678,18 @@ export default function CreateWillPage() {
                   <div className="serif text-4xl leading-none mt-1.5">
                     {Math.min(approvedSet.size, tokens.length)}
                     <span className="text-ink-3">/{tokens.length || 0}</span>
+                    {selectedNFTs.length > 0 && (
+                      <span className="text-ink-3 text-lg ml-2">
+                        + {selectedNFTs.length} NFT{selectedNFTs.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[13px] text-ink-3 mt-1">
-                    {tokens.length === 0
-                      ? "Pick at least one token"
+                    {!hasAssets
+                      ? "Pick at least one token or NFT"
                       : allApproved
                       ? "All set — continue"
-                      : "Approve each token before continuing"}
+                      : "Approve all assets before continuing"}
                   </div>
                   <div className="mt-4 pt-4 border-t border-line text-xs text-ink-2 leading-relaxed">
                     <div className="flex items-center gap-2 text-ink font-medium mb-1.5">
@@ -629,11 +706,15 @@ export default function CreateWillPage() {
                 next={() => setStep(2)}
                 nextDisabled={!allApproved}
                 nextLabel={
-                  !allApproved && tokens.length > 0
-                    ? `Approve all tokens (${Math.min(
+                  !allApproved && hasAssets
+                    ? `Approve all assets (${Math.min(
                         approvedSet.size,
                         tokens.length
-                      )}/${tokens.length})`
+                      )}/${tokens.length} tokens${
+                        selectedNFTs.length > 0
+                          ? `, ${selectedNFTs.length} NFTs`
+                          : ""
+                      })`
                     : "Continue"
                 }
               />
@@ -690,6 +771,33 @@ export default function CreateWillPage() {
                     </div>
                   }
                 />
+                {selectedNFTs.length > 0 && (
+                  <ReviewRow
+                    k="NFTs"
+                    v={
+                      <div className="grid gap-2">
+                        {selectedNFTs.map((n) => (
+                          <div
+                            key={`${n.contractAddress}-${n.tokenId}`}
+                            className="flex items-center gap-2.5"
+                          >
+                            <span className="text-sm">
+                              {n.name}{" "}
+                              <span className="text-ink-3 text-xs">
+                                ({n.nftType === "erc721"
+                                  ? "ERC-721"
+                                  : `ERC-1155 x${n.amount}`})
+                              </span>
+                            </span>
+                            <span className="text-xs text-good">
+                              · approved
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    }
+                  />
+                )}
                 <ReviewRow
                   k="Grace period"
                   v={`${gracePeriod} days of silence triggers eligibility`}

@@ -51,8 +51,28 @@ export function useCreateWill() {
     });
   };
 
+  const createWillWithNFTs = (
+    beneficiary: `0x${string}`,
+    tokens: `0x${string}`[],
+    nfts: {
+      contractAddr: `0x${string}`;
+      tokenId: bigint;
+      amount: bigint;
+      nftType: number;
+    }[],
+    gracePeriodSeconds: bigint
+  ) => {
+    writeContract({
+      address: CRYPTO_WILL_V2_ADDRESS,
+      abi: CRYPTO_WILL_V2_ABI,
+      functionName: "createWillWithNFTs",
+      args: [beneficiary, tokens, nfts, gracePeriodSeconds],
+    });
+  };
+
   return {
     createWill,
+    createWillWithNFTs,
     isPending: isPending || isConfirming,
     isSuccess,
     hash,

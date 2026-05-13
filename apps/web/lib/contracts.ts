@@ -182,6 +182,46 @@ export const CRYPTO_WILL_V2_ABI = [
   },
   {
     type: "function",
+    name: "updateNFTs",
+    inputs: [
+      { name: "willId", type: "uint256" },
+      {
+        name: "newNFTs",
+        type: "tuple[]",
+        components: [
+          { name: "contractAddr", type: "address" },
+          { name: "tokenId", type: "uint256" },
+          { name: "amount", type: "uint256" },
+          { name: "nftType", type: "uint8" },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "createWillWithNFTs",
+    inputs: [
+      { name: "beneficiary", type: "address" },
+      { name: "tokens", type: "address[]" },
+      {
+        name: "nfts",
+        type: "tuple[]",
+        components: [
+          { name: "contractAddr", type: "address" },
+          { name: "tokenId", type: "uint256" },
+          { name: "amount", type: "uint256" },
+          { name: "nftType", type: "uint8" },
+        ],
+      },
+      { name: "gracePeriod", type: "uint256" },
+    ],
+    outputs: [{ name: "willId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "depositETH",
     inputs: [{ name: "willId", type: "uint256" }],
     outputs: [],
@@ -209,6 +249,16 @@ export const CRYPTO_WILL_V2_ABI = [
           { name: "owner", type: "address" },
           { name: "beneficiary", type: "address" },
           { name: "tokens", type: "address[]" },
+          {
+            name: "nfts",
+            type: "tuple[]",
+            components: [
+              { name: "contractAddr", type: "address" },
+              { name: "tokenId", type: "uint256" },
+              { name: "amount", type: "uint256" },
+              { name: "nftType", type: "uint8" },
+            ],
+          },
           { name: "lastAlive", type: "uint256" },
           { name: "gracePeriod", type: "uint256" },
           { name: "active", type: "bool" },
@@ -312,6 +362,97 @@ export const ERC20_ABI = [
     name: "decimals",
     inputs: [],
     outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+  },
+] as const;
+
+export const ERC721_ABI = [
+  {
+    type: "function",
+    name: "isApprovedForAll",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "operator", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setApprovalForAll",
+    inputs: [
+      { name: "operator", type: "address" },
+      { name: "approved", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "name",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "symbol",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "tokenURI",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "ownerOf",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+] as const;
+
+export const ERC1155_ABI = [
+  {
+    type: "function",
+    name: "isApprovedForAll",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "operator", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setApprovalForAll",
+    inputs: [
+      { name: "operator", type: "address" },
+      { name: "approved", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    inputs: [
+      { name: "account", type: "address" },
+      { name: "id", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "uri",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ name: "", type: "string" }],
     stateMutability: "view",
   },
 ] as const;

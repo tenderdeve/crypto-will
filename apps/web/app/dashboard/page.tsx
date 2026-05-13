@@ -12,6 +12,7 @@ import { AssetsCard } from "@/components/dashboard/assets-card";
 import { BeneficiaryCard } from "@/components/dashboard/beneficiary-card";
 import { ETHDepositCard } from "@/components/dashboard/eth-deposit-card";
 import { ActivityList } from "@/components/dashboard/activity-list";
+import { NFTsCard } from "@/components/dashboard/nfts-card";
 import { TrustStrip } from "@/components/dashboard/trust-strip";
 import { WillSelector } from "@/components/dashboard/will-selector";
 import {
@@ -290,6 +291,12 @@ export default function DashboardPage() {
                 error={beneficiaryError}
               />
             </div>
+
+            {/* NFTs — V2 wills include NFT data */}
+            {(() => {
+              const w = will as unknown as { nfts?: { contractAddr: string; tokenId: bigint; amount: bigint; nftType: number }[] };
+              return w.nfts && w.nfts.length > 0 ? <NFTsCard nfts={w.nfts} /> : null;
+            })()}
 
             {/* ETH Deposit */}
             <ETHDepositCard

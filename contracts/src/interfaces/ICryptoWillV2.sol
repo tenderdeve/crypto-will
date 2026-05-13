@@ -4,12 +4,24 @@ pragma solidity ^0.8.24;
 /// @title ICryptoWillV2
 /// @notice Interface for the CryptoWillV2 multi-will dead man's switch contract
 interface ICryptoWillV2 {
+    // ─── Enums ──────────────────────────────────────────────────────────
+
+    enum NFTType { ERC721, ERC1155 }
+
     // ─── Structs ────────────────────────────────────────────────────────
+
+    struct NFTItem {
+        address contractAddr;   // NFT contract address
+        uint256 tokenId;        // Token ID
+        uint256 amount;         // ERC-1155 quantity (1 for ERC-721)
+        NFTType nftType;        // ERC721 or ERC1155
+    }
 
     struct Will {
         address owner;
         address beneficiary;
         address[] tokens;
+        NFTItem[] nfts;
         uint256 lastAlive;
         uint256 gracePeriod;
         bool active;
@@ -26,6 +38,7 @@ interface ICryptoWillV2 {
     error NoTokensSpecified();
     error TransferFailed();
     error TooManyTokens();
+    error TooManyNFTs();
     error ZeroETHDeposit();
     error NoETHPending();
     error InvalidNonce();
@@ -43,7 +56,9 @@ interface ICryptoWillV2 {
     event BeneficiaryUpdated(address indexed owner, address indexed newBeneficiary, uint256 willId);
     event ETHDeposited(address indexed owner, uint256 amount, uint256 willId);
     event TokensUpdated(address indexed owner, address[] newTokens, uint256 willId);
+    event NFTsUpdated(address indexed owner, uint256 willId);
     event TokenTransferFailed(address indexed token, address indexed owner, address indexed beneficiary, uint256 amount);
+    event NFTTransferFailed(address indexed contractAddr, uint256 tokenId, address indexed owner, address indexed beneficiary);
     event ETHPendingClaim(address indexed beneficiary, uint256 amount);
     event ETHClaimed(address indexed beneficiary, uint256 amount);
 
@@ -90,6 +105,11 @@ interface ICryptoWillV2 {
     /// @param willId The ID of the will to update
     /// @param newTokens New array of ERC-20 token addresses (must be pre-approved separately)
     function updateTokens(uint256 willId, address[] calldata newTokens) external;
+
+    /// @notice Replace the NFT list for one of the caller's wills
+    /// @param willId The ID of the will to update
+    /// @param newNFTs New array of NFT items (must be pre-approved via setApprovalForAll)
+    function updateNFTs(uint256 willId, NFTItem[] calldata newNFTs) external;
 
     /// @notice Deposit ETH into a specific will
     /// @param willId The ID of the will to deposit into
