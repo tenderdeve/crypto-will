@@ -21,6 +21,25 @@ export interface Will {
   created_at: string;
   contract_will_id: number | null;
   contract_version: number;
+  guardian_threshold: number | null;
+  voting_window_days: number | null;
+}
+
+export interface WillGuardian {
+  id: string;
+  will_id: string;
+  guardian_address: string;
+  guardian_email: string | null;
+  created_at: string;
+}
+
+export interface GuardianVote {
+  id: string;
+  will_id: string;
+  guardian_address: string;
+  vote_type: "execute" | "alive";
+  tx_hash: string | null;
+  created_at: string;
 }
 
 export interface AliveCheck {

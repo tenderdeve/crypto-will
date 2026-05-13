@@ -14,6 +14,7 @@ import { ETHDepositCard } from "@/components/dashboard/eth-deposit-card";
 import { ActivityList } from "@/components/dashboard/activity-list";
 import { TrustStrip } from "@/components/dashboard/trust-strip";
 import { WillSelector } from "@/components/dashboard/will-selector";
+import { GuardiansCard } from "@/components/dashboard/guardians-card";
 import {
   useWill,
   useSignAlive,
@@ -23,6 +24,7 @@ import {
   useDepositETH,
   useUpdateBeneficiary,
 } from "@/hooks/use-will";
+import { useGuardians } from "@/hooks/use-guardians";
 
 function formatTimestamp(timestamp: bigint): string {
   if (!timestamp || timestamp === BigInt(0)) return "Never";
@@ -69,6 +71,17 @@ export default function DashboardPage() {
     isSuccess: beneficiarySuccess,
     error: beneficiaryError,
   } = useUpdateBeneficiary();
+
+  // Guardian state — using willId 0 for V1 backward compatibility
+  const {
+    guardians,
+    threshold: guardianThreshold,
+    votingWindow,
+    votes: guardianVotes,
+    votingEndsAt,
+    votingActive,
+    hasGuardians,
+  } = useGuardians(address, will ? BigInt(0) : undefined);
 
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
@@ -298,6 +311,16 @@ export default function DashboardPage() {
               isPending={isDepositing}
               isSuccess={depositSuccess}
               error={depositError}
+            />
+
+            {/* Guardians */}
+            <GuardiansCard
+              guardians={guardians as readonly `0x${string}`[]}
+              threshold={guardianThreshold}
+              votingWindow={votingWindow}
+              votes={guardianVotes}
+              votingEndsAt={votingEndsAt}
+              votingActive={votingActive}
             />
 
             {/* Activity */}

@@ -212,6 +212,15 @@ export const CRYPTO_WILL_V2_ABI = [
           { name: "lastAlive", type: "uint256" },
           { name: "gracePeriod", type: "uint256" },
           { name: "active", type: "bool" },
+          {
+            name: "guardianConfig",
+            type: "tuple",
+            components: [
+              { name: "guardians", type: "address[]" },
+              { name: "threshold", type: "uint8" },
+              { name: "votingWindow", type: "uint256" },
+            ],
+          },
         ],
       },
     ],
@@ -268,6 +277,93 @@ export const CRYPTO_WILL_V2_ABI = [
     stateMutability: "view",
   },
   {
+    type: "function",
+    name: "setGuardians",
+    inputs: [
+      { name: "willId", type: "uint256" },
+      { name: "guardians", type: "address[]" },
+      { name: "threshold", type: "uint8" },
+      { name: "votingWindow", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "startVoting",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "willId", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "voteToExecute",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "willId", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "voteAlive",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "willId", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getGuardianConfig",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "willId", type: "uint256" },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "guardians", type: "address[]" },
+          { name: "threshold", type: "uint8" },
+          { name: "votingWindow", type: "uint256" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getVoteStatus",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "willId", type: "uint256" },
+    ],
+    outputs: [
+      { name: "votes", type: "uint256" },
+      { name: "threshold", type: "uint256" },
+      { name: "votingEndsAt", type: "uint256" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hasVoted",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "willId", type: "uint256" },
+      { name: "guardian", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
     type: "event",
     name: "WillCreated",
     inputs: [
@@ -275,6 +371,35 @@ export const CRYPTO_WILL_V2_ABI = [
       { name: "beneficiary", type: "address", indexed: true },
       { name: "gracePeriod", type: "uint256", indexed: false },
       { name: "willId", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "GuardiansSet",
+    inputs: [
+      { name: "owner", type: "address", indexed: true },
+      { name: "willId", type: "uint256", indexed: false },
+      { name: "guardians", type: "address[]", indexed: false },
+      { name: "threshold", type: "uint8", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "VotingStarted",
+    inputs: [
+      { name: "owner", type: "address", indexed: true },
+      { name: "willId", type: "uint256", indexed: false },
+      { name: "timestamp", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "GuardianVoted",
+    inputs: [
+      { name: "owner", type: "address", indexed: true },
+      { name: "willId", type: "uint256", indexed: false },
+      { name: "guardian", type: "address", indexed: true },
+      { name: "voteType", type: "string", indexed: false },
     ],
   },
 ] as const;

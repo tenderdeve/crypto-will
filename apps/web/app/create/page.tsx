@@ -9,14 +9,15 @@ import { Brand } from "@/components/landing/brand";
 import { useTokenApproval } from "@/hooks/use-token-approval";
 import { useCreateWill } from "@/hooks/use-create-will";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
-import { Shield, Mail, Check, ArrowRight, Info } from "lucide-react";
+import { Shield, Mail, Check, ArrowRight, Info, Users } from "lucide-react";
 
 // ─── Constants ──────────────────────────────────────────────────────
 
 const STEPS = [
   { id: "details", n: "01", t: "Details" },
   { id: "tokens", n: "02", t: "Tokens & approvals" },
-  { id: "review", n: "03", t: "Review & create" },
+  { id: "guardians", n: "03", t: "Guardians (optional)" },
+  { id: "review", n: "04", t: "Review & create" },
 ];
 
 const GRACE_OPTIONS = [
@@ -157,7 +158,25 @@ export default function CreateWillPage() {
     []
   );
 
-  // Step 3
+  // Step 3: Guardian state
+  const [guardianInputs, setGuardianInputs] = useState<string[]>([""]);
+  const [guardianThreshold, setGuardianThreshold] = useState(2);
+  const [votingWindowDays, setVotingWindowDays] = useState(14);
+  const [guardiansEnabled, setGuardiansEnabled] = useState(false);
+
+  const validGuardians = guardianInputs.filter(
+    (g) => isAddress(g) && g.toLowerCase() !== address?.toLowerCase()
+  );
+  const guardianStep3Ok =
+    !guardiansEnabled ||
+    (validGuardians.length >= 1 &&
+      validGuardians.length <= 5 &&
+      guardianThreshold >= 1 &&
+      guardianThreshold <= validGuardians.length &&
+      votingWindowDays >= 7 &&
+      votingWindowDays <= 30);
+
+  // Step 4
   const { createWill, isPending, isSuccess, hash, error, willId: contractWillId } = useCreateWill();
   const [dbSaving, setDbSaving] = useState(false);
   const dbSaveAttempted = useRef(false);
@@ -640,11 +659,171 @@ export default function CreateWillPage() {
             </div>
           )}
 
-          {/* Step 3: Review & create */}
+          {/* Step 3: Guardians (optional) */}
           {step === 2 && (
             <div>
               <StepHeader
                 kicker="Step 03"
+                title="Add guardians. Or skip."
+                sub="Guardians add a multi-sig approval gate. When your grace period expires, M-of-N guardians must vote before execution."
+              />
+              <div className="grid grid-cols-1 gap-8 items-start lg:grid-cols-[1fr_320px]">
+                <div className="max-w-[620px]">
+                  {/* Enable toggle */}
+                  <label className="flex items-center gap-3 mb-6 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={guardiansEnabled}
+                      onChange={(e) => setGuardiansEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-accent"
+                    />
+                    <span className="text-[15px] font-medium">
+                      Enable guardian system
+                    </span>
+                  </label>
+
+                  {guardiansEnabled && (
+                    <>
+                      {/* Guardian addresses */}
+                      <div className="mb-6">
+                        <div className="text-[13px] text-ink-2 font-medium mb-2.5">
+                          Guardian wallet addresses (2-5)
+                        </div>
+                        <div className="space-y-2">
+                          {guardianInputs.map((g, i) => (
+                            <div key={i} className="flex gap-2">
+                              <input
+                                value={g}
+                                onChange={(e) => {
+                                  const next = [...guardianInputs];
+                                  next[i] = e.target.value;
+                                  setGuardianInputs(next);
+                                }}
+                                placeholder={`Guardian ${i + 1} (0x...)`}
+                                className="flex-1 px-3 py-2.5 rounded-inputs border border-line bg-paper text-[15px] outline-none"
+                              />
+                              {guardianInputs.length > 1 && (
+                                <button
+                                  onClick={() => {
+                                    const next = guardianInputs.filter((_, idx) => idx !== i);
+                                    setGuardianInputs(next);
+                                  }}
+                                  className="bg-transparent border-none text-ink-3 cursor-pointer text-lg hover:text-ink"
+                                >
+                                  x
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {guardianInputs.length < 5 && (
+                          <button
+                            onClick={() =>
+                              setGuardianInputs([...guardianInputs, ""])
+                            }
+                            className="mt-2 text-accent text-[13px] font-medium bg-transparent border-none cursor-pointer"
+                          >
+                            + Add guardian
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Threshold */}
+                      <div className="mb-6">
+                        <div className="text-[13px] text-ink-2 font-medium mb-2.5">
+                          Votes required (threshold)
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={guardianThreshold}
+                            onChange={(e) =>
+                              setGuardianThreshold(Number(e.target.value))
+                            }
+                            className="px-3 py-2.5 rounded-inputs border border-line bg-paper text-[15px] outline-none"
+                          >
+                            {Array.from(
+                              {
+                                length: Math.max(1, validGuardians.length),
+                              },
+                              (_, i) => i + 1
+                            ).map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="text-sm text-ink-3">
+                            of {validGuardians.length} guardian
+                            {validGuardians.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Voting window */}
+                      <div>
+                        <div className="text-[13px] text-ink-2 font-medium mb-2.5">
+                          Voting window (days)
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[7, 14, 21, 30].map((d) => (
+                            <button
+                              key={d}
+                              onClick={() => setVotingWindowDays(d)}
+                              className={`px-3 py-3 rounded-inputs border cursor-pointer text-center text-sm font-medium ${
+                                votingWindowDays === d
+                                  ? "bg-ink text-paper border-ink"
+                                  : "bg-paper text-ink border-line"
+                              }`}
+                            >
+                              {d} days
+                            </button>
+                          ))}
+                        </div>
+                        <div className="text-xs text-ink-3 mt-2">
+                          Guardians must vote within this window after voting
+                          starts.
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Sidebar */}
+                <aside className="sticky top-6 p-6 rounded-cards bg-bg-2 border border-line hidden lg:block">
+                  <div className="flex items-center gap-2 text-ink font-medium mb-3">
+                    <Users className="w-4 h-4" /> How guardians work
+                  </div>
+                  <ol className="m-0 pl-4 text-[13px] text-ink-2 leading-relaxed space-y-1">
+                    <li>Grace period expires as usual.</li>
+                    <li>A voting session is started.</li>
+                    <li>
+                      Guardians vote to execute or vouch you&apos;re alive.
+                    </li>
+                    <li>
+                      If threshold met: will executes (or alive timer resets).
+                    </li>
+                    <li>
+                      If window expires without threshold: voting resets.
+                    </li>
+                  </ol>
+                </aside>
+              </div>
+              <NavBar
+                back={() => setStep(1)}
+                next={() => setStep(3)}
+                nextDisabled={!guardianStep3Ok}
+                nextLabel={
+                  guardiansEnabled ? "Continue" : "Skip — no guardians"
+                }
+              />
+            </div>
+          )}
+
+          {/* Step 4: Review & create */}
+          {step === 3 && (
+            <div>
+              <StepHeader
+                kicker="Step 04"
                 title="One signature. Then it's live."
                 sub={`This calls createWill() on the contract — beneficiary, token list, and ${gracePeriod}-day grace period in a single transaction.`}
               />
@@ -695,6 +874,32 @@ export default function CreateWillPage() {
                   v={`${gracePeriod} days of silence triggers eligibility`}
                 />
                 <ReviewRow
+                  k="Guardians"
+                  v={
+                    guardiansEnabled && validGuardians.length > 0 ? (
+                      <div>
+                        <div className="text-sm font-medium mb-1">
+                          {guardianThreshold} of {validGuardians.length} required
+                        </div>
+                        <div className="text-xs text-ink-3">
+                          {votingWindowDays}-day voting window
+                        </div>
+                        <div className="mt-1.5 space-y-0.5">
+                          {validGuardians.map((g) => (
+                            <div key={g} className="mono text-xs text-ink-3">
+                              {short(g)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-ink-3">
+                        None — will executes automatically
+                      </span>
+                    )
+                  }
+                />
+                <ReviewRow
                   k="Email"
                   v={<span>{email}</span>}
                   last
@@ -704,6 +909,8 @@ export default function CreateWillPage() {
                   <b className="text-ink">Estimated gas:</b> ~$0.04 on Base.
                   One transaction registers your beneficiary, token list, and
                   grace period.
+                  {guardiansEnabled &&
+                    " Guardians are set in a second transaction after creation."}
                 </div>
               </div>
 
@@ -716,7 +923,7 @@ export default function CreateWillPage() {
               )}
 
               <NavBar
-                back={() => setStep(1)}
+                back={() => setStep(2)}
                 next={handleCreate}
                 nextLabel={
                   dbSaving

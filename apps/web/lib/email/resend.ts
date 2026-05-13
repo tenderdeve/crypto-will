@@ -92,6 +92,50 @@ export async function sendExpiryWarningEmail(params: {
   });
 }
 
+export async function sendGuardianVotingEmail(params: {
+  to: string;
+  ownerAddress: string;
+  guardianAddress: string;
+  willId: string;
+  votingWindowDays: number;
+}) {
+  const resend = getResend();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const votingLink = `${appUrl}/guardian/${params.willId}?owner=${params.ownerAddress}`;
+
+  await resend.emails.send({
+    from: "CryptoWill <noreply@cryptowill.xyz>",
+    to: params.to,
+    subject: "CryptoWill — Guardian vote requested",
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #1a1a1a;">Guardian Vote Requested</h1>
+        <p style="color: #4a4a4a; font-size: 16px;">
+          A CryptoWill requires your guardian vote. The will owner's grace period has expired.
+        </p>
+        <p style="color: #4a4a4a; font-size: 16px;">
+          <strong>Will owner:</strong> <code>${params.ownerAddress.slice(0, 6)}...${params.ownerAddress.slice(-4)}</code><br/>
+          <strong>Your guardian wallet:</strong> <code>${params.guardianAddress.slice(0, 6)}...${params.guardianAddress.slice(-4)}</code>
+        </p>
+        <p style="color: #4a4a4a; font-size: 16px;">
+          You have <strong>${params.votingWindowDays} days</strong> to cast your vote.
+          You can vote to <strong>execute the will</strong> or <strong>vouch that the owner is alive</strong>.
+        </p>
+        <a href="${votingLink}" style="display: inline-block; background: #000; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+          Cast Your Vote
+        </a>
+        <p style="color: #888; font-size: 14px;">
+          Or visit: ${votingLink}
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+        <p style="color: #888; font-size: 12px;">
+          CryptoWill — Protecting crypto legacies. You're receiving this because you are listed as a guardian.
+        </p>
+      </div>
+    `,
+  });
+}
+
 export async function sendWillExecutedEmail(params: {
   to: string;
   beneficiaryAddress: string;
