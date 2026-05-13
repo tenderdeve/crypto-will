@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { isAddress } from "viem";
 import { Check } from "lucide-react";
+import { TokenPrice } from "@/lib/prices/types";
+import { formatUSD } from "@/lib/format";
 
 export function AssetsCard({
   tokens,
@@ -13,6 +15,8 @@ export function AssetsCard({
   tokensDirty,
   isUpdating,
   updateSuccess,
+  prices,
+  tokenBalances,
 }: {
   tokens: readonly `0x${string}`[];
   localTokens: string[];
@@ -22,8 +26,19 @@ export function AssetsCard({
   tokensDirty: boolean;
   isUpdating: boolean;
   updateSuccess: boolean;
+  prices?: Record<string, TokenPrice>;
+  tokenBalances?: Record<string, number>;
 }) {
   const [input, setInput] = useState("");
+
+  // Compute total portfolio USD value across all tokens
+  const totalUSD = localTokens.reduce((sum, addr) => {
+    const price = prices?.[addr.toLowerCase()];
+    const balance = tokenBalances?.[addr.toLowerCase()];
+    if (price && balance) return sum + price.usd * balance;
+    return sum;
+  }, 0);
+  const hasPriceData = prices && Object.keys(prices).length > 0;
 
   const handleAdd = () => {
     if (!isAddress(input) || localTokens.some((t) => t.toLowerCase() === input.toLowerCase())) return;
@@ -42,39 +57,58 @@ export function AssetsCard({
             {tokens.length} token{tokens.length !== 1 ? "s" : ""}
           </div>
         </div>
+        {hasPriceData && totalUSD > 0 && (
+          <div className="text-right">
+            <div className="text-[11px] tracking-[0.14em] uppercase text-ink-3">
+              Total value
+            </div>
+            <div className="serif text-2xl mt-0.5 leading-none">
+              {formatUSD(totalUSD)}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-1 mt-4">
-        {localTokens.map((t, i) => (
-          <div
-            key={t}
-            className="grid items-center gap-4 py-3.5 px-2 border-t border-line-2"
-            style={{ gridTemplateColumns: "1fr 90px" }}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-ink/10 flex items-center justify-center text-xs font-bold shrink-0">
-                T
-              </div>
-              <div>
-                <code className="text-xs text-ink truncate block max-w-[300px]">
-                  {t}
-                </code>
-                <div className="text-[11px] text-good inline-flex items-center gap-1 mt-0.5">
-                  <Check className="w-3 h-3" /> Approved
+        {localTokens.map((t, i) => {
+          const price = prices?.[t.toLowerCase()];
+          const balance = tokenBalances?.[t.toLowerCase()];
+          const usdValue = price && balance ? price.usd * balance : null;
+
+          return (
+            <div
+              key={t}
+              className="grid items-center gap-4 py-3.5 px-2 border-t border-line-2"
+              style={{ gridTemplateColumns: "1fr auto 90px" }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-ink/10 flex items-center justify-center text-xs font-bold shrink-0">
+                  T
+                </div>
+                <div>
+                  <code className="text-xs text-ink truncate block max-w-[300px]">
+                    {t}
+                  </code>
+                  <div className="text-[11px] text-good inline-flex items-center gap-1 mt-0.5">
+                    <Check className="w-3 h-3" /> Approved
+                  </div>
                 </div>
               </div>
+              <div className="text-right mono text-sm text-ink-2">
+                {usdValue !== null ? formatUSD(usdValue) : "--"}
+              </div>
+              <div className="text-right">
+                <button
+                  onClick={() => onRemoveToken(i)}
+                  disabled={isUpdating}
+                  className="bg-transparent border-none text-ink-3 cursor-pointer text-xs underline hover:text-ink"
+                >
+                  Remove
+                </button>
+              </div>
             </div>
-            <div className="text-right">
-              <button
-                onClick={() => onRemoveToken(i)}
-                disabled={isUpdating}
-                className="bg-transparent border-none text-ink-3 cursor-pointer text-xs underline hover:text-ink"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-4 flex gap-2">

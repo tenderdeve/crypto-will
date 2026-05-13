@@ -2,7 +2,7 @@
 
 import { useAccount } from "wagmi";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isAddress } from "viem";
 import { WalletGuard } from "@/components/wallet/wallet-guard";
 import { DashHeader } from "@/components/dashboard/dash-header";
@@ -22,6 +22,8 @@ import {
   useDepositETH,
   useUpdateBeneficiary,
 } from "@/hooks/use-will";
+import { useTokenPrices } from "@/hooks/use-token-prices";
+import { useWalletTokens } from "@/hooks/use-wallet-tokens";
 
 function formatTimestamp(timestamp: bigint): string {
   if (!timestamp || timestamp === BigInt(0)) return "Never";
@@ -68,6 +70,19 @@ export default function DashboardPage() {
     isSuccess: beneficiarySuccess,
     error: beneficiaryError,
   } = useUpdateBeneficiary();
+
+  // Token prices and balances for USD display
+  const { tokens: walletTokens } = useWalletTokens();
+  const { prices } = useTokenPrices(
+    will?.tokens ? [...will.tokens] : []
+  );
+  const tokenBalances = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of walletTokens) {
+      map[t.address.toLowerCase()] = Number(t.balance);
+    }
+    return map;
+  }, [walletTokens]);
 
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
@@ -308,6 +323,8 @@ export default function DashboardPage() {
                 tokensDirty={tokensDirty}
                 isUpdating={isUpdatingTokens}
                 updateSuccess={updateSuccess}
+                prices={prices}
+                tokenBalances={tokenBalances}
               />
               <BeneficiaryCard
                 beneficiary={will.beneficiary}
@@ -330,6 +347,7 @@ export default function DashboardPage() {
               isPending={isDepositing}
               isSuccess={depositSuccess}
               error={depositError}
+              ethPrice={prices?.["eth"]}
             />
 
             {/* Activity */}
