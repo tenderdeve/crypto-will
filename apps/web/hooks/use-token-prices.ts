@@ -24,7 +24,7 @@ export function useTokenPrices(tokenAddresses: string[]) {
   );
 
   const fetchPrices = useCallback(async () => {
-    if (!chainId) return;
+    if (!chainId || stableAddresses.length === 0) return;
 
     setIsLoading(true);
     try {
@@ -55,13 +55,14 @@ export function useTokenPrices(tokenAddresses: string[]) {
     fetchPrices();
   }, [fetchPrices]);
 
-  // Refresh on interval
+  // Refresh on interval (only when there are tokens to price)
   useEffect(() => {
+    if (stableAddresses.length === 0) return;
     intervalRef.current = setInterval(fetchPrices, REFRESH_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [fetchPrices]);
+  }, [fetchPrices, stableAddresses.length]);
 
   return { prices, isLoading };
 }
