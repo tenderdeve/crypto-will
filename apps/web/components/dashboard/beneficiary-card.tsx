@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { isAddress } from "viem";
-import { Mail } from "lucide-react";
+import { Lock } from "lucide-react";
+import { EnsAddress } from "@/components/ui/ens-address";
+import { SealedLetterDialog } from "@/components/dashboard/sealed-letter-dialog";
 
 function short(a: string) {
   return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
@@ -11,6 +13,7 @@ function short(a: string) {
 export function BeneficiaryCard({
   beneficiary,
   ownerAddress,
+  willId,
   beneficiaryEmail,
   onUpdate,
   onUpdateEmail,
@@ -22,6 +25,7 @@ export function BeneficiaryCard({
 }: {
   beneficiary: string;
   ownerAddress: string;
+  willId: string;
   beneficiaryEmail?: string | null;
   onUpdate: (addr: `0x${string}`) => void;
   onUpdateEmail?: (email: string | null) => void;
@@ -35,6 +39,7 @@ export function BeneficiaryCard({
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [input, setInput] = useState("");
+  const [letterOpen, setLetterOpen] = useState(false);
 
   const valid =
     isAddress(input) &&
@@ -51,7 +56,7 @@ export function BeneficiaryCard({
         <div>
           <div className="serif text-2xl leading-[1.1]">Single recipient</div>
           <div className="mono text-xs text-ink-3 mt-1">
-            {short(beneficiary)}
+            <EnsAddress address={beneficiary} />
           </div>
         </div>
       </div>
@@ -113,18 +118,27 @@ export function BeneficiaryCard({
         )}
       </div>
 
-      {/* Sealed letter teaser */}
+      {/* Sealed letter */}
       <div className="mt-4 p-4 rounded-inputs bg-paper border border-dashed border-line text-[13px] text-ink-2 leading-relaxed">
         <div className="text-[10px] tracking-[0.14em] uppercase text-ink-3 mb-1.5">
           Sealed letter
         </div>
-        <span className="italic text-ink-3">
-          Encrypted note for your beneficiary —{" "}
+        <span className="text-ink-3">
+          Leave an encrypted note only your beneficiary can read.
         </span>
-        <span className="inline-block ml-1 px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-medium tracking-[0.06em] uppercase">
-          Coming soon
-        </span>
+        <button
+          onClick={() => setLetterOpen(true)}
+          className="mt-2 flex items-center gap-1.5 bg-transparent border border-line text-ink-2 px-3 py-1.5 rounded-pill text-[13px] cursor-pointer hover:border-ink hover:text-ink"
+        >
+          <Lock className="w-3.5 h-3.5" />
+          Write sealed letter
+        </button>
       </div>
+      <SealedLetterDialog
+        willId={willId}
+        open={letterOpen}
+        onOpenChange={setLetterOpen}
+      />
 
       {/* Edit beneficiary */}
       <div className="mt-auto pt-5">

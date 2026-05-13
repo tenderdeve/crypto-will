@@ -10,7 +10,8 @@ import { useTokenApproval } from "@/hooks/use-token-approval";
 import { useCreateWill } from "@/hooks/use-create-will";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
 import { useWill } from "@/hooks/use-will";
-import { Shield, Mail, Check, ArrowRight, Info } from "lucide-react";
+import { useEnsAddress } from "@/hooks/use-ens-address";
+import { Shield, Mail, Check, ArrowRight, Info, Loader2 } from "lucide-react";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 import { formatUSD } from "@/lib/format";
 
@@ -149,6 +150,14 @@ export default function CreateWillPage() {
   const [email, setEmail] = useState("");
   const [gracePeriod, setGracePeriod] = useState(90);
 
+  // ENS resolution — detect .eth input and resolve to address
+  const isEnsInput = beneficiary.endsWith(".eth") && beneficiary.length > 4;
+  const { ensAddress, isLoading: ensLoading } = useEnsAddress(
+    isEnsInput ? beneficiary : undefined
+  );
+  // Use resolved ENS address when available, otherwise use raw input
+  const resolvedBeneficiary = isEnsInput && ensAddress ? ensAddress : beneficiary;
+
   // Step 2 state
   const [tokenInput, setTokenInput] = useState("");
   const [tokens, setTokens] = useState<`0x${string}`[]>([]);
@@ -199,7 +208,7 @@ export default function CreateWillPage() {
         "x-wallet-address": address,
       },
       body: JSON.stringify({
-        beneficiaryAddress: beneficiary,
+        beneficiaryAddress: resolvedBeneficiary,
         tokenAddresses: tokens,
         gracePeriodDays: gracePeriod,
         contractTxHash: hash,
@@ -212,7 +221,7 @@ export default function CreateWillPage() {
         setDbSaving(false);
         router.push("/dashboard");
       });
-  }, [isSuccess, hash, address, beneficiary, tokens, gracePeriod, email, beneficiaryEmail, router]);
+  }, [isSuccess, hash, address, resolvedBeneficiary, tokens, gracePeriod, email, beneficiaryEmail, router]);
 
   const fetchTokenMeta = async (tokenAddr: `0x${string}`) => {
     if (!publicClient || !address) return;
@@ -295,13 +304,13 @@ export default function CreateWillPage() {
 
   const handleCreate = () => {
     const gracePeriodSeconds = BigInt(gracePeriod * 24 * 60 * 60);
-    createWill(beneficiary as `0x${string}`, tokens, gracePeriodSeconds);
+    createWill(resolvedBeneficiary as `0x${string}`, tokens, gracePeriodSeconds);
   };
 
-  // Validation
+  // Validation — use resolved address (from ENS or raw input)
   const validAddr =
-    isAddress(beneficiary) &&
-    beneficiary.toLowerCase() !== address?.toLowerCase();
+    isAddress(resolvedBeneficiary) &&
+    resolvedBeneficiary.toLowerCase() !== address?.toLowerCase();
   const validEmail = /\S+@\S+\.\S+/.test(email);
   const validBeneficiaryEmail = !beneficiaryEmail || /\S+@\S+\.\S+/.test(beneficiaryEmail);
   const step1Ok = validAddr && validEmail && validBeneficiaryEmail;
@@ -391,21 +400,40 @@ export default function CreateWillPage() {
                     label="Beneficiary wallet address"
                     hint="0x… or ENS · single recipient"
                   >
-                    <input
-                      value={beneficiary}
-                      onChange={(e) => setBeneficiary(e.target.value)}
-                      placeholder="0x7B0e…41a8 or alex.eth"
-                      className="border-none outline-none bg-transparent w-full font-inherit text-[15px]"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={beneficiary}
+                        onChange={(e) => setBeneficiary(e.target.value)}
+                        placeholder="0x7B0e…41a8 or alex.eth"
+                        className="border-none outline-none bg-transparent w-full font-inherit text-[15px]"
+                      />
+                      {isEnsInput && ensLoading && (
+                        <Loader2 className="w-4 h-4 text-ink-3 animate-spin shrink-0" />
+                      )}
+                      {isEnsInput && ensAddress && (
+                        <Check className="w-4 h-4 text-good shrink-0" />
+                      )}
+                    </div>
                   </FieldBox>
-                  {beneficiary && !isAddress(beneficiary) && (
+                  {isEnsInput && ensAddress && (
+                    <div className="text-[13px] text-good -mt-3 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      Resolved to <span className="mono text-xs">{ensAddress.slice(0, 6)}…{ensAddress.slice(-4)}</span>
+                    </div>
+                  )}
+                  {isEnsInput && !ensLoading && !ensAddress && (
+                    <div className="text-[13px] text-danger -mt-3">
+                      ENS name not found.
+                    </div>
+                  )}
+                  {!isEnsInput && beneficiary && !isAddress(beneficiary) && (
                     <div className="text-[13px] text-danger -mt-3">
                       Invalid address.
                     </div>
                   )}
                   {beneficiary &&
-                    isAddress(beneficiary) &&
-                    beneficiary.toLowerCase() === address?.toLowerCase() && (
+                    isAddress(resolvedBeneficiary) &&
+                    resolvedBeneficiary.toLowerCase() === address?.toLowerCase() && (
                       <div className="text-[13px] text-danger -mt-3">
                         Can&apos;t be your own address.
                       </div>
@@ -500,11 +528,9 @@ export default function CreateWillPage() {
                     <div className="flex items-center gap-2 text-ink font-medium mb-1.5">
                       <Mail className="w-4 h-4" /> Sealed letter
                     </div>
-                    A future feature: leave an encrypted note that&apos;s only
-                    revealed if your will executes.
-                    <span className="inline-block ml-1.5 px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-medium tracking-[0.06em] uppercase">
-                      Coming soon
-                    </span>
+                    After creating your will, you can leave an encrypted note
+                    from the dashboard. Only your beneficiary can read it — with
+                    a password you share out-of-band.
                   </div>
                 </aside>
               </div>
@@ -717,7 +743,16 @@ export default function CreateWillPage() {
                 <ReviewRow k="Owner" v={<span className="mono">{address}</span>} />
                 <ReviewRow
                   k="Beneficiary"
-                  v={<span className="mono">{beneficiary}</span>}
+                  v={
+                    <span className="mono">
+                      {resolvedBeneficiary}
+                      {isEnsInput && ensAddress && (
+                        <span className="text-ink-3 text-xs ml-2 not-italic">
+                          ({beneficiary})
+                        </span>
+                      )}
+                    </span>
+                  }
                 />
                 <ReviewRow
                   k="Tokens"
