@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatEther } from "viem";
 import { getExpiredWills, updateWillStatus } from "@/lib/db/queries/wills";
 import { getPublicClient, getWalletClient } from "@/lib/chain/client";
 import { CRYPTO_WILL_ABI, CRYPTO_WILL_ADDRESS } from "@/lib/chain/contracts";
-import { sendWillExecutedEmail } from "@/lib/email/resend";
+import { sendWillExecutedEmail, sendBeneficiaryNotificationEmail } from "@/lib/email/resend";
 import { getSupabaseAdmin } from "@/lib/db/supabase";
 
 export async function GET(request: NextRequest) {
@@ -52,6 +53,20 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
+        // Read ETH balance before execution (will be transferred during executeWill)
+        let ethAmount = "0";
+        try {
+          const ethBalance = await publicClient.readContract({
+            address: CRYPTO_WILL_ADDRESS,
+            abi: CRYPTO_WILL_ABI,
+            functionName: "ethBalances",
+            args: [user.wallet_address as `0x${string}`],
+          });
+          ethAmount = formatEther(ethBalance);
+        } catch {
+          // Non-critical — default to "0"
+        }
+
         // Execute will on-chain
         const walletClient = getWalletClient();
         const hash = await walletClient.writeContract({
@@ -67,13 +82,25 @@ export async function GET(request: NextRequest) {
         // Update DB status
         await updateWillStatus(will.id, "executed");
 
-        // Notify via email (best effort)
+        // Notify owner via email (best effort)
         if (user.email) {
           await sendWillExecutedEmail({
             to: user.email,
             beneficiaryAddress: will.beneficiary_address,
             ownerAddress: user.wallet_address,
             tokenCount: will.token_addresses.length,
+          }).catch(() => {}); // Don't fail on email error
+        }
+
+        // Notify beneficiary via email (best effort)
+        if (will.beneficiary_email) {
+          await sendBeneficiaryNotificationEmail({
+            to: will.beneficiary_email,
+            ownerAddress: user.wallet_address,
+            beneficiaryAddress: will.beneficiary_address,
+            tokenCount: will.token_addresses.length,
+            ethAmount,
+            txHash: hash,
           }).catch(() => {}); // Don't fail on email error
         }
 

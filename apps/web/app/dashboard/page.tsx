@@ -2,7 +2,7 @@
 
 import { useAccount } from "wagmi";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isAddress } from "viem";
 import { WalletGuard } from "@/components/wallet/wallet-guard";
 import { DashHeader } from "@/components/dashboard/dash-header";
@@ -22,6 +22,8 @@ import {
   useDepositETH,
   useUpdateBeneficiary,
 } from "@/hooks/use-will";
+import { useTokenPrices } from "@/hooks/use-token-prices";
+import { useWalletTokens } from "@/hooks/use-wallet-tokens";
 
 function formatTimestamp(timestamp: bigint): string {
   if (!timestamp || timestamp === BigInt(0)) return "Never";
@@ -82,11 +84,63 @@ export default function DashboardPage() {
       .catch(() => {});
   }, [address]);
 
+  // Token prices and balances for USD display
+  const { tokens: walletTokens } = useWalletTokens();
+  const { prices } = useTokenPrices(
+    will?.tokens ? [...will.tokens] : []
+  );
+  const tokenBalances = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const t of walletTokens) {
+      map[t.address.toLowerCase()] = Number(t.balance);
+    }
+    return map;
+  }, [walletTokens]);
+
   const aliveSynced = useRef(false);
   const updateSynced = useRef(false);
   const revokeSynced = useRef(false);
   const beneficiarySynced = useRef(false);
   const revokeClicked = useRef(false);
+
+  // DB will state (for beneficiary_email)
+  const [dbWill, setDbWill] = useState<{ id: string; beneficiary_email: string | null } | null>(null);
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+
+  // Fetch DB will to get beneficiary_email
+  useEffect(() => {
+    if (!address) return;
+    fetch("/api/will", { headers: { "x-wallet-address": address } })
+      .then((r) => r.json())
+      .then((data) => {
+        const w = data?.wills?.[0];
+        if (w) setDbWill({ id: w.id, beneficiary_email: w.beneficiary_email ?? null });
+      })
+      .catch(() => {});
+  }, [address]);
+
+  const handleUpdateBeneficiaryEmail = (email: string | null) => {
+    if (!dbWill) return;
+    setEmailSaving(true);
+    setEmailSaved(false);
+    fetch(`/api/will/${dbWill.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-wallet-address": address || "",
+      },
+      body: JSON.stringify({ beneficiaryEmail: email }),
+    })
+      .then((r) => {
+        if (r.ok) {
+          setDbWill((prev) => prev ? { ...prev, beneficiary_email: email } : prev);
+          setEmailSaved(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setEmailSaving(false));
+  };
 
   // Token management state
   const [localTokens, setLocalTokens] = useState<string[]>([]);
@@ -282,15 +336,21 @@ export default function DashboardPage() {
                 tokensDirty={tokensDirty}
                 isUpdating={isUpdatingTokens}
                 updateSuccess={updateSuccess}
+                prices={prices}
+                tokenBalances={tokenBalances}
               />
               <BeneficiaryCard
                 beneficiary={will.beneficiary}
                 ownerAddress={address || ""}
                 willId={dbWillId || ""}
+                beneficiaryEmail={dbWill?.beneficiary_email}
                 onUpdate={updateBeneficiary}
+                onUpdateEmail={handleUpdateBeneficiaryEmail}
                 isPending={isUpdatingBeneficiary}
                 isSuccess={beneficiarySuccess}
                 error={beneficiaryError}
+                emailSaving={emailSaving}
+                emailSaved={emailSaved}
               />
             </div>
 
@@ -301,6 +361,7 @@ export default function DashboardPage() {
               isPending={isDepositing}
               isSuccess={depositSuccess}
               error={depositError}
+              ethPrice={prices?.["eth"]}
             />
 
             {/* Activity */}

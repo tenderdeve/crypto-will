@@ -8,6 +8,7 @@ export const createWillSchema = z.object({
   gracePeriodDays: z.number().int().min(30).max(180),
   contractTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, "Invalid tx hash"),
   email: z.string().email().optional(),
+  beneficiaryEmail: z.string().email().optional(),
 });
 
 export const aliveCheckSchema = z.object({

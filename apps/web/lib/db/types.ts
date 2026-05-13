@@ -12,6 +12,7 @@ export interface Will {
   id: string;
   user_id: string;
   beneficiary_address: string;
+  beneficiary_email: string | null;
   token_addresses: string[];
   contract_tx_hash: string | null;
   grace_period_days: number;

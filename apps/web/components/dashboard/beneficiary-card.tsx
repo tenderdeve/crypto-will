@@ -14,20 +14,30 @@ export function BeneficiaryCard({
   beneficiary,
   ownerAddress,
   willId,
+  beneficiaryEmail,
   onUpdate,
+  onUpdateEmail,
   isPending,
   isSuccess,
   error,
+  emailSaving,
+  emailSaved,
 }: {
   beneficiary: string;
   ownerAddress: string;
   willId: string;
+  beneficiaryEmail?: string | null;
   onUpdate: (addr: `0x${string}`) => void;
+  onUpdateEmail?: (email: string | null) => void;
   isPending: boolean;
   isSuccess: boolean;
   error: Error | null;
+  emailSaving?: boolean;
+  emailSaved?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
   const [input, setInput] = useState("");
   const [letterOpen, setLetterOpen] = useState(false);
 
@@ -49,6 +59,63 @@ export function BeneficiaryCard({
             <EnsAddress address={beneficiary} />
           </div>
         </div>
+      </div>
+
+      {/* Beneficiary email */}
+      <div className="mt-4">
+        {!editingEmail ? (
+          <div className="flex items-center gap-2 text-[13px]">
+            <Mail className="w-3.5 h-3.5 text-ink-3" />
+            {beneficiaryEmail ? (
+              <span className="text-ink-2">{beneficiaryEmail}</span>
+            ) : (
+              <span className="text-ink-3 italic">No email set</span>
+            )}
+            {onUpdateEmail && (
+              <button
+                onClick={() => { setEditingEmail(true); setEmailInput(beneficiaryEmail || ""); }}
+                className="ml-auto bg-transparent border-none text-ink-3 cursor-pointer text-xs hover:text-ink underline"
+              >
+                {beneficiaryEmail ? "Edit" : "Add email"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                type="email"
+                placeholder="beneficiary@email.com"
+                className="flex-1 px-3 py-2 rounded-inputs border border-line bg-paper text-sm outline-none"
+              />
+              <button
+                onClick={() => {
+                  onUpdateEmail?.(emailInput || null);
+                  setEditingEmail(false);
+                  setEmailInput("");
+                }}
+                disabled={emailSaving || (!!emailInput && !/\S+@\S+\.\S+/.test(emailInput))}
+                className="rounded-pill bg-ink text-paper px-3.5 py-2 text-[13px] cursor-pointer border-none disabled:opacity-50"
+              >
+                {emailSaving ? "..." : "Save"}
+              </button>
+              <button
+                onClick={() => { setEditingEmail(false); setEmailInput(""); }}
+                className="bg-transparent border-none text-ink-3 cursor-pointer text-sm"
+              >
+                x
+              </button>
+            </div>
+            {emailInput && !/\S+@\S+\.\S+/.test(emailInput) && (
+              <p className="text-xs text-danger">Invalid email</p>
+            )}
+          </div>
+        )}
+        {emailSaved && !editingEmail && (
+          <p className="text-xs text-good mt-1">Beneficiary email updated.</p>
+        )}
       </div>
 
       {/* Sealed letter */}
