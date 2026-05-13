@@ -7,6 +7,7 @@ export async function createWill(params: {
   tokenAddresses: string[];
   contractTxHash: string;
   gracePeriodDays: number;
+  beneficiaryEmail?: string;
 }): Promise<Will> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -14,6 +15,7 @@ export async function createWill(params: {
     .insert({
       user_id: params.userId,
       beneficiary_address: params.beneficiaryAddress.toLowerCase(),
+      beneficiary_email: params.beneficiaryEmail || null,
       token_addresses: params.tokenAddresses.map((t) => t.toLowerCase()),
       contract_tx_hash: params.contractTxHash,
       grace_period_days: params.gracePeriodDays,
@@ -61,6 +63,16 @@ export async function updateWillStatus(id: string, status: WillStatus): Promise<
     .eq("id", id);
 
   if (error) throw new Error(`Failed to update will: ${error.message}`);
+}
+
+export async function updateWillBeneficiaryEmail(id: string, beneficiaryEmail: string | null): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("wills")
+    .update({ beneficiary_email: beneficiaryEmail })
+    .eq("id", id);
+
+  if (error) throw new Error(`Failed to update beneficiary email: ${error.message}`);
 }
 
 export async function updateWillAlive(id: string): Promise<void> {

@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       tokenAddresses: parsed.data.tokenAddresses,
       contractTxHash: parsed.data.contractTxHash,
       gracePeriodDays: parsed.data.gracePeriodDays,
+      beneficiaryEmail: parsed.data.beneficiaryEmail,
     });
 
     return NextResponse.json({ will }, { status: 201 });

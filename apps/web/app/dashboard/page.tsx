@@ -75,6 +75,45 @@ export default function DashboardPage() {
   const beneficiarySynced = useRef(false);
   const revokeClicked = useRef(false);
 
+  // DB will state (for beneficiary_email)
+  const [dbWill, setDbWill] = useState<{ id: string; beneficiary_email: string | null } | null>(null);
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+
+  // Fetch DB will to get beneficiary_email
+  useEffect(() => {
+    if (!address) return;
+    fetch("/api/will", { headers: { "x-wallet-address": address } })
+      .then((r) => r.json())
+      .then((data) => {
+        const w = data?.wills?.[0];
+        if (w) setDbWill({ id: w.id, beneficiary_email: w.beneficiary_email ?? null });
+      })
+      .catch(() => {});
+  }, [address]);
+
+  const handleUpdateBeneficiaryEmail = (email: string | null) => {
+    if (!dbWill) return;
+    setEmailSaving(true);
+    setEmailSaved(false);
+    fetch(`/api/will/${dbWill.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-wallet-address": address || "",
+      },
+      body: JSON.stringify({ beneficiaryEmail: email }),
+    })
+      .then((r) => {
+        if (r.ok) {
+          setDbWill((prev) => prev ? { ...prev, beneficiary_email: email } : prev);
+          setEmailSaved(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setEmailSaving(false));
+  };
+
   // Token management state
   const [localTokens, setLocalTokens] = useState<string[]>([]);
   const [tokensDirty, setTokensDirty] = useState(false);
@@ -273,10 +312,14 @@ export default function DashboardPage() {
               <BeneficiaryCard
                 beneficiary={will.beneficiary}
                 ownerAddress={address || ""}
+                beneficiaryEmail={dbWill?.beneficiary_email}
                 onUpdate={updateBeneficiary}
+                onUpdateEmail={handleUpdateBeneficiaryEmail}
                 isPending={isUpdatingBeneficiary}
                 isSuccess={beneficiarySuccess}
                 error={beneficiaryError}
+                emailSaving={emailSaving}
+                emailSaved={emailSaved}
               />
             </div>
 

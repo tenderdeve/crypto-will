@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWillById, updateWillStatus } from "@/lib/db/queries/wills";
+import { getWillById, updateWillStatus, updateWillBeneficiaryEmail } from "@/lib/db/queries/wills";
 import { getUserByWallet } from "@/lib/db/queries/users";
+import { z } from "zod";
 
 async function resolveOwner(request: NextRequest, willId: string) {
   const walletAddress = request.headers.get("x-wallet-address");
@@ -45,6 +46,19 @@ export async function PATCH(
     const body = await request.json();
     if (body.status) {
       await updateWillStatus(id, body.status);
+    }
+    if (typeof body.beneficiaryEmail !== "undefined") {
+      const emailSchema = z.string().email();
+      if (body.beneficiaryEmail === null || body.beneficiaryEmail === "") {
+        await updateWillBeneficiaryEmail(id, null);
+      } else if (emailSchema.safeParse(body.beneficiaryEmail).success) {
+        await updateWillBeneficiaryEmail(id, body.beneficiaryEmail);
+      } else {
+        return NextResponse.json(
+          { error: "Invalid beneficiary email", code: "VALIDATION_ERROR" },
+          { status: 400 }
+        );
+      }
     }
 
     return NextResponse.json({ success: true });
