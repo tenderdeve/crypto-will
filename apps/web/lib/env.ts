@@ -10,6 +10,7 @@ const envSchema = z.object({
   CRON_SECRET: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_CONTRACT_ADDRESS: z.string().min(1),
+  NEXT_PUBLIC_CONTRACT_V2_ADDRESS: z.string().min(1).optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
