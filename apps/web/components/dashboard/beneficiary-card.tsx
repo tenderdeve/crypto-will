@@ -6,10 +6,6 @@ import { Lock } from "lucide-react";
 import { EnsAddress } from "@/components/ui/ens-address";
 import { SealedLetterDialog } from "@/components/dashboard/sealed-letter-dialog";
 
-function short(a: string) {
-  return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
-}
-
 export function BeneficiaryCard({
   beneficiary,
   ownerAddress,

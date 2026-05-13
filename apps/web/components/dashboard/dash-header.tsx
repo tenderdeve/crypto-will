@@ -2,10 +2,12 @@
 
 import { useAccount, useDisconnect } from "wagmi";
 import { Brand } from "@/components/landing/brand";
+import { useEnsName } from "@/hooks/use-ens-name";
 
 export function DashHeader() {
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
+  const { ensName } = useEnsName(address);
 
   const short = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
 
@@ -17,9 +19,12 @@ export function DashHeader() {
           <span className="w-2 h-2 rounded-full" style={{ background: "#0052ff" }} />
           BASE
         </div>
-        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-pill bg-paper border border-line text-[13px]">
+        <div
+          className="flex items-center gap-2.5 px-3.5 py-2 rounded-pill bg-paper border border-line text-[13px]"
+          title={address}
+        >
           <span className="w-2 h-2 rounded-full bg-good" />
-          <span className="mono">{short}</span>
+          <span className="mono">{ensName || short}</span>
         </div>
         <button
           onClick={() => disconnect()}
