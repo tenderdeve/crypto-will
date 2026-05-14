@@ -318,6 +318,7 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
         Will storage w = wills[msg.sender][willId];
         if (w.owner == address(0)) revert WillNotFound();
         if (!w.active) revert WillNotActive();
+        if (newNFTs.length == 0 && w.tokens.length == 0) revert NoTokensSpecified();
         if (newNFTs.length > MAX_NFTS) revert TooManyNFTs();
 
         // Clear existing NFTs

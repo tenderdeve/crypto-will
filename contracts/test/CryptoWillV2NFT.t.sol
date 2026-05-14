@@ -358,6 +358,21 @@ contract CryptoWillV2NFTTest is Test {
         cryptoWill.updateNFTs(willId, newNFTs);
     }
 
+    function test_updateNFTs_revert_clearAllWhenNoTokens() public {
+        // Create will with NFTs only (no ERC-20 tokens)
+        ICryptoWillV2.NFTItem[] memory nfts = new ICryptoWillV2.NFTItem[](1);
+        nfts[0] = _makeNFT721(address(nft721), 1);
+
+        uint256 willId = _createNFTOnlyWill(nfts);
+
+        // Try to clear all NFTs — should revert because will would have zero assets
+        ICryptoWillV2.NFTItem[] memory empty = new ICryptoWillV2.NFTItem[](0);
+
+        vm.prank(owner);
+        vm.expectRevert(ICryptoWillV2.NoTokensSpecified.selector);
+        cryptoWill.updateNFTs(willId, empty);
+    }
+
     function test_updateNFTs_revert_outOfRange() public {
         ICryptoWillV2.NFTItem[] memory newNFTs = new ICryptoWillV2.NFTItem[](1);
         newNFTs[0] = _makeNFT721(address(nft721), 1);
