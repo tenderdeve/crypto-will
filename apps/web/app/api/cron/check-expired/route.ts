@@ -47,7 +47,9 @@ export async function GET(request: NextRequest) {
         const walletClient = getWalletClient();
         const isV2 = will.contract_version === 2;
         const contractAddress = isV2 ? CRYPTO_WILL_V2_ADDRESS : CRYPTO_WILL_ADDRESS;
-        const contractAbi = isV2 ? CRYPTO_WILL_V2_ABI : CRYPTO_WILL_ABI;
+
+        let txHash: `0x${string}` | undefined;
+        let ethAmount = "0";
 
         if (isV2 && will.contract_will_id !== null) {
           // V2: Check if will has guardians
@@ -122,7 +124,7 @@ export async function GET(request: NextRequest) {
             continue;
           }
 
-          const hash = await walletClient.writeContract({
+          txHash = await walletClient.writeContract({
             address: contractAddress,
             abi: CRYPTO_WILL_V2_ABI,
             functionName: "executeWill",
@@ -132,7 +134,7 @@ export async function GET(request: NextRequest) {
             ],
           });
 
-          await publicClient.waitForTransactionReceipt({ hash });
+          await publicClient.waitForTransactionReceipt({ hash: txHash });
         } else {
           // V1: Original behavior
           const onChainWill = await publicClient.readContract({
@@ -148,14 +150,27 @@ export async function GET(request: NextRequest) {
             continue;
           }
 
-          const hash = await walletClient.writeContract({
+          // Read ETH balance before execution
+          try {
+            const ethBalance = await publicClient.readContract({
+              address: CRYPTO_WILL_ADDRESS,
+              abi: CRYPTO_WILL_ABI,
+              functionName: "ethBalances",
+              args: [user.wallet_address as `0x${string}`],
+            });
+            ethAmount = formatEther(ethBalance);
+          } catch {
+            // Non-critical — default to "0"
+          }
+
+          txHash = await walletClient.writeContract({
             address: CRYPTO_WILL_ADDRESS,
             abi: CRYPTO_WILL_ABI,
             functionName: "executeWill",
             args: [user.wallet_address as `0x${string}`],
           });
 
-          await publicClient.waitForTransactionReceipt({ hash });
+          await publicClient.waitForTransactionReceipt({ hash: txHash });
         }
 
         // Update DB status
@@ -172,14 +187,14 @@ export async function GET(request: NextRequest) {
         }
 
         // Notify beneficiary via email (best effort)
-        if (will.beneficiary_email) {
+        if (will.beneficiary_email && txHash) {
           await sendBeneficiaryNotificationEmail({
             to: will.beneficiary_email,
             ownerAddress: user.wallet_address,
             beneficiaryAddress: will.beneficiary_address,
             tokenCount: will.token_addresses.length,
             ethAmount,
-            txHash: hash,
+            txHash,
           }).catch(() => {}); // Don't fail on email error
         }
 
