@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ICryptoWillV2} from "./interfaces/ICryptoWillV2.sol";
@@ -21,6 +23,9 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
 
     /// @notice Maximum number of tokens per will (prevents gas limit DoS)
     uint256 public constant MAX_TOKENS = 50;
+
+    /// @notice Maximum number of NFTs per will (prevents gas limit DoS)
+    uint256 public constant MAX_NFTS = 20;
 
     /// @notice Maximum number of active wills per address
     uint256 public constant MAX_WILLS_PER_ADDRESS = 10;
@@ -61,11 +66,37 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
         address[] calldata tokens,
         uint256 gracePeriod
     ) external returns (uint256 willId) {
+        NFTItem[] memory emptyNFTs;
+        return _createWill(beneficiary, tokens, emptyNFTs, gracePeriod);
+    }
+
+    /// @notice Create a new will with ERC-20 tokens and NFTs
+    /// @param beneficiary Address that will receive the assets
+    /// @param tokens Array of ERC-20 token addresses to include
+    /// @param nfts Array of NFT items to include
+    /// @param gracePeriod Time in seconds after last alive signal before will can be executed
+    /// @return willId The auto-incremented ID for the new will
+    function createWillWithNFTs(
+        address beneficiary,
+        address[] calldata tokens,
+        NFTItem[] calldata nfts,
+        uint256 gracePeriod
+    ) external returns (uint256 willId) {
+        return _createWill(beneficiary, tokens, nfts, gracePeriod);
+    }
+
+    function _createWill(
+        address beneficiary,
+        address[] calldata tokens,
+        NFTItem[] memory nfts,
+        uint256 gracePeriod
+    ) internal returns (uint256 willId) {
         // Checks
         if (activeWillCount[msg.sender] >= MAX_WILLS_PER_ADDRESS) revert TooManyWills();
         if (beneficiary == address(0) || beneficiary == msg.sender) revert InvalidBeneficiary();
-        if (tokens.length == 0) revert NoTokensSpecified();
+        if (tokens.length == 0 && nfts.length == 0) revert NoTokensSpecified();
         if (tokens.length > MAX_TOKENS) revert TooManyTokens();
+        if (nfts.length > MAX_NFTS) revert TooManyNFTs();
         if (gracePeriod < MIN_GRACE_PERIOD) revert GracePeriodTooShort();
 
         // Effects — assign will ID and store
@@ -73,14 +104,17 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
         willCount[msg.sender] = willId + 1;
         activeWillCount[msg.sender] += 1;
 
-        wills[msg.sender][willId] = Will({
-            owner: msg.sender,
-            beneficiary: beneficiary,
-            tokens: tokens,
-            lastAlive: block.timestamp,
-            gracePeriod: gracePeriod,
-            active: true
-        });
+        Will storage w = wills[msg.sender][willId];
+        w.owner = msg.sender;
+        w.beneficiary = beneficiary;
+        w.tokens = tokens;
+        w.lastAlive = block.timestamp;
+        w.gracePeriod = gracePeriod;
+        w.active = true;
+
+        for (uint256 i = 0; i < nfts.length; i++) {
+            w.nfts.push(nfts[i]);
+        }
 
         emit WillCreated(msg.sender, beneficiary, gracePeriod, willId);
     }
@@ -169,6 +203,7 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
         address beneficiary = w.beneficiary;
         address[] memory tokens = w.tokens;
         uint256 tokenCount = tokens.length;
+        NFTItem[] memory nfts = w.nfts;
 
         uint256 ethAmount = ethBalances[owner][willId];
         ethBalances[owner][willId] = 0;
@@ -199,6 +234,23 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
                 }
             } catch {
                 emit TokenTransferFailed(address(token), owner, beneficiary, amount);
+            }
+        }
+
+        // Interactions — transfer each NFT individually, skipping failures
+        for (uint256 i = 0; i < nfts.length; i++) {
+            if (nfts[i].nftType == NFTType.ERC721) {
+                try IERC721(nfts[i].contractAddr).transferFrom(owner, beneficiary, nfts[i].tokenId) {
+                } catch {
+                    emit NFTTransferFailed(nfts[i].contractAddr, nfts[i].tokenId, owner, beneficiary);
+                }
+            } else {
+                try IERC1155(nfts[i].contractAddr).safeTransferFrom(
+                    owner, beneficiary, nfts[i].tokenId, nfts[i].amount, ""
+                ) {
+                } catch {
+                    emit NFTTransferFailed(nfts[i].contractAddr, nfts[i].tokenId, owner, beneficiary);
+                }
             }
         }
 
@@ -251,12 +303,33 @@ contract CryptoWillV2 is ICryptoWillV2, ReentrancyGuard, EIP712 {
         Will storage w = wills[msg.sender][willId];
         if (w.owner == address(0)) revert WillNotFound();
         if (!w.active) revert WillNotActive();
-        if (newTokens.length == 0) revert NoTokensSpecified();
+        if (newTokens.length == 0 && w.nfts.length == 0) revert NoTokensSpecified();
         if (newTokens.length > MAX_TOKENS) revert TooManyTokens();
 
         w.tokens = newTokens;
 
         emit TokensUpdated(msg.sender, newTokens, willId);
+    }
+
+    /// @inheritdoc ICryptoWillV2
+    function updateNFTs(uint256 willId, NFTItem[] calldata newNFTs) external {
+        if (willId >= willCount[msg.sender]) revert WillIdOutOfRange();
+
+        Will storage w = wills[msg.sender][willId];
+        if (w.owner == address(0)) revert WillNotFound();
+        if (!w.active) revert WillNotActive();
+        if (newNFTs.length == 0 && w.tokens.length == 0) revert NoTokensSpecified();
+        if (newNFTs.length > MAX_NFTS) revert TooManyNFTs();
+
+        // Clear existing NFTs
+        delete w.nfts;
+
+        // Add new NFTs
+        for (uint256 i = 0; i < newNFTs.length; i++) {
+            w.nfts.push(newNFTs[i]);
+        }
+
+        emit NFTsUpdated(msg.sender, willId);
     }
 
     /// @inheritdoc ICryptoWillV2
